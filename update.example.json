@@ -1,0 +1,10 @@
+{
+  "version": "1.0.1",
+  "build": "2",
+  "download_url": "https://example.com/Codex-Model-Switcher-1.0.1.dmg",
+  "release_notes_url": "https://example.com/codex-model-switcher/releases/1.0.1",
+  "minimum_macos": "13.0",
+  "message": "Improved model discovery and proxy stability.",
+  "sha256": "replace-with-generated-sha256",
+  "size_bytes": 0
+}

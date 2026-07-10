@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_NAME="${APP_NAME:-Codex Model Switcher}"
+EXECUTABLE_NAME="CodexModelSwitcher"
+BUNDLE_ID="${BUNDLE_ID:-vn.bigroll.codex-model-switcher}"
+VERSION="${VERSION:-1.0.0}"
+BUILD_NUMBER="${BUILD_NUMBER:-1}"
+DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+UPDATE_MANIFEST_URL="${UPDATE_MANIFEST_URL:-https://raw.githubusercontent.com/bigroll/codex-model-switcher/main/update.json}"
+ROUTER_TARGET_URL="${ROUTER_TARGET_URL:-https://9router.bigroll.vn}"
+BUNDLED_NINEROUTER_API_KEY="${BUNDLED_NINEROUTER_API_KEY:-}"
+AUTO_REFRESH_MODELS_ON_LAUNCH="${AUTO_REFRESH_MODELS_ON_LAUNCH:-true}"
+EMBED_EXISTING_NINEROUTER_API_KEY="${EMBED_EXISTING_NINEROUTER_API_KEY:-0}"
+case "$AUTO_REFRESH_MODELS_ON_LAUNCH" in
+  1|true|TRUE|yes|YES) AUTO_REFRESH_MODELS_ON_LAUNCH="true" ;;
+  *) AUTO_REFRESH_MODELS_ON_LAUNCH="false" ;;
+esac
+
+xml_escape() {
+  python3 -c 'import html,sys; print(html.escape(sys.stdin.read(), quote=True), end="")'
+}
+
+detect_existing_ninerouter_key() {
+  if [[ -n "${NINEROUTER_API_KEY:-}" ]]; then
+    printf '%s' "$NINEROUTER_API_KEY"
+    return 0
+  fi
+  local env_file="$HOME/.codex/.env"
+  [[ -f "$env_file" ]] || return 1
+  awk '
+    function clean(value) {
+      sub(/^[^=]*=/, "", value)
+      sub(/[[:space:]]*#.*/, "", value)
+      gsub(/^[[:space:]"'\''"]+|[[:space:]"'\''"\r]+$/, "", value)
+      return value
+    }
+    tolower($0) ~ /^[[:space:]]*(export[[:space:]]+)?(ninerouter_api_key|nine_router_api_key|9router_api_key|ninerouter_token|nine_router_token)[[:space:]]*=/ {
+      value = clean($0)
+      if (value != "") {
+        print value
+        exit
+      }
+    }
+  ' "$env_file"
+}
+
+if [[ -z "$BUNDLED_NINEROUTER_API_KEY" ]]; then
+  case "$EMBED_EXISTING_NINEROUTER_API_KEY" in
+    1|true|TRUE|yes|YES)
+      BUNDLED_NINEROUTER_API_KEY="$(detect_existing_ninerouter_key || true)"
+      ;;
+  esac
+fi
+
+ESCAPED_UPDATE_MANIFEST_URL="$(printf '%s' "$UPDATE_MANIFEST_URL" | xml_escape)"
+ESCAPED_ROUTER_TARGET_URL="$(printf '%s' "$ROUTER_TARGET_URL" | xml_escape)"
+ESCAPED_BUNDLED_NINEROUTER_API_KEY="$(printf '%s' "$BUNDLED_NINEROUTER_API_KEY" | xml_escape)"
+
+export DEVELOPER_DIR
+
+clean_bundle_xattrs() {
+  local target="$1"
+  xattr -cr "$target" 2>/dev/null || true
+  while IFS= read -r path; do
+    xattr -d com.apple.FinderInfo "$path" 2>/dev/null || true
+    xattr -d 'com.apple.fileprovider.fpfs#P' "$path" 2>/dev/null || true
+    xattr -d com.apple.quarantine "$path" 2>/dev/null || true
+  done < <(find "$target" -print)
+}
+
+verify_bundle() {
+  local target="$1"
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    clean_bundle_xattrs "$target"
+    if codesign --verify --deep --strict --verbose=2 "$target"; then
+      clean_bundle_xattrs "$target"
+      return 0
+    fi
+    sleep 0.25
+  done
+  clean_bundle_xattrs "$target"
+  codesign --verify --deep --strict --verbose=2 "$target"
+}
+
+cd "$ROOT_DIR"
+swift build -c release --product "$EXECUTABLE_NAME"
+
+BIN_DIR="$(swift build -c release --show-bin-path)"
+DIST_DIR="$ROOT_DIR/dist"
+APP_DIR="$DIST_DIR/${APP_NAME}.app"
+STAGE_DIR="${TMPDIR:-/tmp}/codex-model-switcher-build"
+STAGE_APP_DIR="$STAGE_DIR/${APP_NAME}.app"
+
+rm -rf "$STAGE_APP_DIR"
+mkdir -p "$STAGE_APP_DIR/Contents/MacOS" "$STAGE_APP_DIR/Contents/Resources"
+
+cp "$BIN_DIR/$EXECUTABLE_NAME" "$STAGE_APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
+cp "$ROOT_DIR/Sources/CodexModelSwitcherCore/Resources/codex_9router_proxy.py" "$STAGE_APP_DIR/Contents/Resources/codex_9router_proxy.py"
+chmod +x "$STAGE_APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
+
+if [[ -f "$ROOT_DIR/Assets/AppIcon.icns" ]]; then
+  clean_bundle_xattrs "$ROOT_DIR/Assets/AppIcon.icns"
+  cp "$ROOT_DIR/Assets/AppIcon.icns" "$STAGE_APP_DIR/Contents/Resources/AppIcon.icns"
+fi
+
+cat > "$STAGE_APP_DIR/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleExecutable</key>
+  <string>${EXECUTABLE_NAME}</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+  <key>CFBundleIdentifier</key>
+  <string>${BUNDLE_ID}</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>${APP_NAME}</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>${VERSION}</string>
+  <key>CFBundleVersion</key>
+  <string>${BUILD_NUMBER}</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2026 Bigroll</string>
+  <key>NSUserNotificationAlertStyle</key>
+  <string>alert</string>
+  <key>UpdateManifestURL</key>
+  <string>${ESCAPED_UPDATE_MANIFEST_URL}</string>
+  <key>DefaultRouterTargetURL</key>
+  <string>${ESCAPED_ROUTER_TARGET_URL}</string>
+  <key>BundledNineRouterAPIKey</key>
+  <string>${ESCAPED_BUNDLED_NINEROUTER_API_KEY}</string>
+  <key>AutoRefreshModelsOnLaunch</key>
+  <${AUTO_REFRESH_MODELS_ON_LAUNCH}/>
+</dict>
+</plist>
+PLIST
+
+clean_bundle_xattrs "$STAGE_APP_DIR"
+codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$STAGE_APP_DIR"
+verify_bundle "$STAGE_APP_DIR"
+rm -rf "$APP_DIR"
+mkdir -p "$DIST_DIR"
+ditto --norsrc --noextattr "$STAGE_APP_DIR" "$APP_DIR"
+verify_bundle "$APP_DIR"
+
+echo "$APP_DIR"

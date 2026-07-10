@@ -1,0 +1,12 @@
+.DS_Store
+.build/
+.swiftpm/
+dist/
+*.xcresult
+*.dSYM
+*.log
+
+# Local secrets and generated user config should never be committed.
+.env
+*.p8
+*.mobileprovision

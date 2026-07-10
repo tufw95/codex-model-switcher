@@ -1,0 +1,150 @@
+# Codex Model Switcher
+
+Native macOS app for switching Codex between the authentic provider and a 9Router-backed provider with minimal user setup.
+
+## What It Does
+
+- Runs as a SwiftUI menu bar-only macOS app.
+- Saves `NINEROUTER_API_KEY` once to `~/.codex/.env` and exports it through `launchctl`.
+- Generates `~/.codex/9router-model-catalog.json` so custom models appear in the Codex model picker.
+- Starts a local LaunchAgent proxy on `127.0.0.1:9783`.
+- Rewrites Codex config safely while preserving unrelated settings.
+- Keeps the Chrome/node_repl repair logic from the original AppleScript bundle.
+- Checks an update manifest and shows a macOS notification when a newer version is available.
+- Supports internal team presets through `Info.plist`, including a bundled 9Router API key, default router URL, and auto model refresh on launch.
+
+## Daily Use
+
+1. Open `dist/Codex Model Switcher.app`.
+2. Click the menu bar icon.
+3. Choose `9Router` or `Authentic`.
+
+For internal team builds, the app can embed the shared 9Router API key, so users do not need to paste anything.
+
+The app converts `gpt 5.6` to:
+
+```json
+{
+  "codexSlug": "gpt-5.6",
+  "upstreamModel": "cx/gpt-5.6"
+}
+```
+
+Codex then sees `gpt-5.6` in its model picker, while the proxy forwards requests to `cx/gpt-5.6`.
+
+## Build
+
+```bash
+cd CodexModelSwitcher
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
+VERSION=1.0.0 BUILD_NUMBER=1 ./scripts/build_app.sh
+```
+
+The app is written to:
+
+```text
+dist/Codex Model Switcher.app
+```
+
+## Package DMG
+
+```bash
+UPDATE_MANIFEST_URL="https://example.com/update.json" \
+ROUTER_TARGET_URL="https://9router.bigroll.vn" \
+VERSION=1.0.0 \
+BUILD_NUMBER=1 \
+./scripts/package_dmg.sh
+```
+
+The DMG is written to:
+
+```text
+dist/Codex-Model-Switcher-1.0.0.dmg
+```
+
+## Developer ID Signing
+
+For public distribution, set your Developer ID identity:
+
+```bash
+SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+VERSION=1.0.0 \
+BUILD_NUMBER=1 \
+./scripts/package_dmg.sh
+```
+
+Ad-hoc signing is enough for local testing, but public downloads should use Developer ID signing and notarization.
+
+## Notarize
+
+```bash
+APPLE_ID="you@example.com" \
+APPLE_TEAM_ID="TEAMID" \
+APPLE_APP_PASSWORD="app-specific-password" \
+VERSION=1.0.0 \
+./scripts/notarize.sh
+```
+
+## Update Notifications
+
+The app reads a JSON manifest. The default URL can be changed in the Updates section.
+For a public release, set the default URL at build time with `UPDATE_MANIFEST_URL`.
+
+Example:
+
+```json
+{
+  "version": "1.0.1",
+  "build": "2",
+  "download_url": "https://example.com/Codex-Model-Switcher-1.0.1.dmg",
+  "release_notes_url": "https://example.com/codex-model-switcher/releases/1.0.1",
+  "minimum_macos": "13.0",
+  "message": "Improved model discovery and proxy stability."
+}
+```
+
+Generate a manifest after uploading a DMG:
+
+```bash
+VERSION=1.0.1 \
+BUILD_NUMBER=2 \
+DOWNLOAD_URL="https://example.com/Codex-Model-Switcher-1.0.1.dmg" \
+RELEASE_NOTES_URL="https://example.com/codex-model-switcher/releases/1.0.1" \
+./scripts/make_update_manifest.sh
+```
+
+Upload `dist/update.json` to the manifest URL. Every installed app that has update checks enabled will notify the user when `version` is greater than the installed version.
+
+## Internal Team Build
+
+For a no-code team build, you can embed the shared 9Router API key at build time:
+
+```bash
+BUNDLED_NINEROUTER_API_KEY="sk-..." \
+ROUTER_TARGET_URL="https://9router.bigroll.vn" \
+UPDATE_MANIFEST_URL="https://example.com/update.json" \
+AUTO_REFRESH_MODELS_ON_LAUNCH=true \
+VERSION=1.0.0 \
+BUILD_NUMBER=1 \
+./scripts/package_dmg.sh
+```
+
+On first launch, the app saves the bundled key to `~/.codex/.env` if the user does not already have a key. It also refreshes models from 9Router automatically when possible.
+
+Security note: a bundled API key can be extracted from the app bundle by a determined user. This is convenient for trusted internal distribution, but a server-side team gateway is better if the key must remain secret.
+
+## Files Written On User Machines
+
+- `~/.codex/.env`
+- `~/.codex/config.toml`
+- `~/.codex/config.toml.before-model-switcher`
+- `~/.codex/9router-model-catalog.json`
+- `~/Library/Application Support/Codex Model Switcher/models.json`
+- `~/Library/Application Support/Codex Model Switcher/updates.json`
+- `~/Library/LaunchAgents/com.bigroll.codex-model-switcher.proxy.plist`
+
+## Notes
+
+- The original AppleScript bundle is not modified.
+- The app keeps the local proxy model rewrite behavior from the existing implementation.
+- The updater is intentionally manifest-based so it works without a third-party update framework. If you later want one-click in-place replacement, Sparkle can be added on top of the same release pipeline.

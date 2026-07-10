@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without v prefix, for example 1.0.1"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: swift test
+
+      - name: Build DMG
+        env:
+          BUNDLED_NINEROUTER_API_KEY: ${{ secrets.NINEROUTER_API_KEY }}
+          ROUTER_TARGET_URL: https://9router.bigroll.vn
+          AUTO_REFRESH_MODELS_ON_LAUNCH: "true"
+          UPDATE_MANIFEST_URL: https://github.com/${{ github.repository }}/releases/latest/download/update.json
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: ./scripts/package_dmg.sh
+
+      - name: Build Update Manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          DOWNLOAD_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/Codex-Model-Switcher-${{ steps.version.outputs.version }}.dmg
+          RELEASE_NOTES_URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }}
+          MESSAGE: Codex Model Switcher ${{ steps.version.outputs.version }} is ready.
+        run: ./scripts/make_update_manifest.sh
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "Codex Model Switcher $VERSION" --notes "Codex Model Switcher $VERSION"
+          gh release upload "$TAG" \
+            "dist/Codex-Model-Switcher-$VERSION.dmg" \
+            "dist/update.json" \
+            --clobber
