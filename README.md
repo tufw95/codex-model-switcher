@@ -11,15 +11,14 @@ Native macOS app for switching Codex between the authentic provider and a 9Route
 - Rewrites Codex config safely while preserving unrelated settings.
 - Keeps the Chrome/node_repl repair logic from the original AppleScript bundle.
 - Checks an update manifest and shows a macOS notification when a newer version is available.
-- Supports internal team presets through `Info.plist`, including a bundled 9Router API key, default router URL, and auto model refresh on launch.
+- Keeps each user's 9Router API key local to their Mac.
 
 ## Daily Use
 
 1. Open `dist/Codex Model Switcher.app`.
 2. Click the menu bar icon.
-3. Choose `9Router` or `Authentic`.
-
-For internal team builds, the app can embed the shared 9Router API key, so users do not need to paste anything.
+3. Paste the 9Router API key once if prompted.
+4. Choose `9Router` or `Authentic`.
 
 The app converts `gpt 5.6` to:
 
@@ -114,24 +113,6 @@ RELEASE_NOTES_URL="https://example.com/codex-model-switcher/releases/1.0.1" \
 ```
 
 Upload `dist/update.json` to the manifest URL. Every installed app that has update checks enabled will notify the user when `version` is greater than the installed version.
-
-## Internal Team Build
-
-For a no-code team build, you can embed the shared 9Router API key at build time:
-
-```bash
-BUNDLED_NINEROUTER_API_KEY="sk-..." \
-ROUTER_TARGET_URL="https://9router.bigroll.vn" \
-UPDATE_MANIFEST_URL="https://example.com/update.json" \
-AUTO_REFRESH_MODELS_ON_LAUNCH=true \
-VERSION=1.0.0 \
-BUILD_NUMBER=1 \
-./scripts/package_dmg.sh
-```
-
-On first launch, the app saves the bundled key to `~/.codex/.env` if the user does not already have a key. It also refreshes models from 9Router automatically when possible.
-
-Security note: a bundled API key can be extracted from the app bundle by a determined user. This is convenient for trusted internal distribution, but a server-side team gateway is better if the key must remain secret.
 
 ## Files Written On User Machines
 

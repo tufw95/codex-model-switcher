@@ -11,9 +11,7 @@ DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 UPDATE_MANIFEST_URL="${UPDATE_MANIFEST_URL:-https://raw.githubusercontent.com/bigroll/codex-model-switcher/main/update.json}"
 ROUTER_TARGET_URL="${ROUTER_TARGET_URL:-https://9router.bigroll.vn}"
-BUNDLED_NINEROUTER_API_KEY="${BUNDLED_NINEROUTER_API_KEY:-}"
 AUTO_REFRESH_MODELS_ON_LAUNCH="${AUTO_REFRESH_MODELS_ON_LAUNCH:-true}"
-EMBED_EXISTING_NINEROUTER_API_KEY="${EMBED_EXISTING_NINEROUTER_API_KEY:-0}"
 case "$AUTO_REFRESH_MODELS_ON_LAUNCH" in
   1|true|TRUE|yes|YES) AUTO_REFRESH_MODELS_ON_LAUNCH="true" ;;
   *) AUTO_REFRESH_MODELS_ON_LAUNCH="false" ;;
@@ -23,41 +21,8 @@ xml_escape() {
   python3 -c 'import html,sys; print(html.escape(sys.stdin.read(), quote=True), end="")'
 }
 
-detect_existing_ninerouter_key() {
-  if [[ -n "${NINEROUTER_API_KEY:-}" ]]; then
-    printf '%s' "$NINEROUTER_API_KEY"
-    return 0
-  fi
-  local env_file="$HOME/.codex/.env"
-  [[ -f "$env_file" ]] || return 1
-  awk '
-    function clean(value) {
-      sub(/^[^=]*=/, "", value)
-      sub(/[[:space:]]*#.*/, "", value)
-      gsub(/^[[:space:]"'\''"]+|[[:space:]"'\''"\r]+$/, "", value)
-      return value
-    }
-    tolower($0) ~ /^[[:space:]]*(export[[:space:]]+)?(ninerouter_api_key|nine_router_api_key|9router_api_key|ninerouter_token|nine_router_token)[[:space:]]*=/ {
-      value = clean($0)
-      if (value != "") {
-        print value
-        exit
-      }
-    }
-  ' "$env_file"
-}
-
-if [[ -z "$BUNDLED_NINEROUTER_API_KEY" ]]; then
-  case "$EMBED_EXISTING_NINEROUTER_API_KEY" in
-    1|true|TRUE|yes|YES)
-      BUNDLED_NINEROUTER_API_KEY="$(detect_existing_ninerouter_key || true)"
-      ;;
-  esac
-fi
-
 ESCAPED_UPDATE_MANIFEST_URL="$(printf '%s' "$UPDATE_MANIFEST_URL" | xml_escape)"
 ESCAPED_ROUTER_TARGET_URL="$(printf '%s' "$ROUTER_TARGET_URL" | xml_escape)"
-ESCAPED_BUNDLED_NINEROUTER_API_KEY="$(printf '%s' "$BUNDLED_NINEROUTER_API_KEY" | xml_escape)"
 
 export DEVELOPER_DIR
 
@@ -142,8 +107,6 @@ cat > "$STAGE_APP_DIR/Contents/Info.plist" <<PLIST
   <string>${ESCAPED_UPDATE_MANIFEST_URL}</string>
   <key>DefaultRouterTargetURL</key>
   <string>${ESCAPED_ROUTER_TARGET_URL}</string>
-  <key>BundledNineRouterAPIKey</key>
-  <string>${ESCAPED_BUNDLED_NINEROUTER_API_KEY}</string>
   <key>AutoRefreshModelsOnLaunch</key>
   <${AUTO_REFRESH_MODELS_ON_LAUNCH}/>
 </dict>

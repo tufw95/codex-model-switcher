@@ -4,6 +4,7 @@ import SwiftUI
 
 struct CompactSwitchView: View {
     @EnvironmentObject private var app: AppState
+    @State private var editingAPIKey = false
 
     private var usingNineRouter: Bool {
         app.status.activeProvider == "NineRouter"
@@ -45,6 +46,40 @@ struct CompactSwitchView: View {
             }
 
             Divider()
+
+            if !app.status.apiKeyAvailable || editingAPIKey {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("9ROUTER API KEY")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.secondary)
+
+                    SecureField("Paste API key once", text: $app.apiKeyInput)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit {
+                            app.saveAPIKey()
+                            if app.errorMessage == nil {
+                                editingAPIKey = false
+                            }
+                        }
+
+                    HStack {
+                        Text("Saved locally on this Mac")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Save") {
+                            app.saveAPIKey()
+                            if app.errorMessage == nil {
+                                editingAPIKey = false
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(app.apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+
+                Divider()
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("CHOOSE MODE")
@@ -98,10 +133,18 @@ struct CompactSwitchView: View {
             Divider()
 
             HStack {
-                Text("Models sync automatically")
+                Text(app.status.apiKeyAvailable ? "API key saved locally" : "API key required for 9Router")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                if app.status.apiKeyAvailable && !editingAPIKey {
+                    Button("Change Key") {
+                        app.apiKeyInput = ""
+                        editingAPIKey = true
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
                 }

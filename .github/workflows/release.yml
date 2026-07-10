@@ -38,7 +38,6 @@ jobs:
 
       - name: Build DMG
         env:
-          BUNDLED_NINEROUTER_API_KEY: ${{ secrets.NINEROUTER_API_KEY }}
           ROUTER_TARGET_URL: https://9router.bigroll.vn
           AUTO_REFRESH_MODELS_ON_LAUNCH: "true"
           UPDATE_MANIFEST_URL: https://github.com/${{ github.repository }}/releases/latest/download/update.json

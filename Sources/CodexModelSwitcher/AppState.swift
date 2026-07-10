@@ -50,7 +50,6 @@ final class AppState: ObservableObject {
         if let url = URL(string: teamPreset.routerTargetURL) {
             self.codexService = CodexService(routerTargetURL: url)
         }
-        applyTeamPresetIfNeeded()
         load()
         Task {
             await bootstrapOnLaunch()
@@ -298,15 +297,6 @@ final class AppState: ObservableObject {
         }
         isBusy = false
         refreshStatus()
-    }
-
-    private func applyTeamPresetIfNeeded() {
-        guard codexService.readAPIKey() == nil,
-              let bundledKey = teamPreset.bundledAPIKey,
-              !bundledKey.isEmpty else {
-            return
-        }
-        try? codexService.saveAPIKey(bundledKey)
     }
 
     private func notifyUpdate(_ manifest: UpdateManifest) {

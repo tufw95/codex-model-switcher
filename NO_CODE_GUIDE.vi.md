@@ -4,7 +4,7 @@ Tai lieu nay danh cho nguoi dung macOS chi muon mo app va dung, khong can biet b
 
 ## Cai Lan Dau
 
-Nguoi quan ly team gui file:
+Nguoi quan ly team gui link GitHub Release hoac file:
 
 ```text
 Codex-Model-Switcher-1.0.0.dmg
@@ -12,18 +12,17 @@ Codex-Model-Switcher-1.0.0.dmg
 
 Nguoi dung mo file `.dmg`, keo `Codex Model Switcher.app` vao `Applications`, roi mo app.
 
-Neu ban build ban noi bo co nhung san API key, dong nghiep khong can nhap key. App se tu luu key vao `~/.codex/.env` trong lan mo dau tien.
-
 ## Cach Dung Hang Ngay
 
 1. Mo `Codex Model Switcher`.
 2. Nhin len thanh menu tren cung cua macOS.
 3. Bam icon `Codex Switch`.
-4. Chon `9Router` hoac `Authentic`.
+4. Neu app hoi API key, dan 9Router API key vao va bam `Save`.
+5. Chon `9Router` hoac `Authentic`.
 
 App se tu:
 
-- Tu dong lay API key da nhung trong app neu may chua co key.
+- Luu API key local tren may nguoi dung tai `~/.codex/.env`.
 - Tu dong sync model tu 9Router khi mo app va khi chuyen sang 9Router.
 - Tao model catalog de Codex thay model moi.
 - Start local proxy.
@@ -51,24 +50,9 @@ De update hoat dong, nguoi quan ly team can upload:
 - File `.dmg` moi.
 - File `update.json` moi len dung URL da cau hinh trong app.
 
-## Tao Ban Team Co San API Key
-
-Nguoi build app chay lenh:
-
-```bash
-BUNDLED_NINEROUTER_API_KEY="sk-..." \
-ROUTER_TARGET_URL="https://9router.bigroll.vn" \
-UPDATE_MANIFEST_URL="https://your-domain.example/update.json" \
-VERSION=1.0.0 \
-BUILD_NUMBER=1 \
-./scripts/package_dmg.sh
-```
-
-Can hieu ro: API key nhung trong app co the bi trich xuat neu ai do co y dinh dao nguoc binary. Cach nay phu hop cho team noi bo tin cay. Neu can bao mat hon, nen dung proxy/team gateway rieng de khong phat tan key that.
-
 ## Khi Co Su Co
 
-Bam `Use Authentic Codex` de quay ve provider goc va dung proxy.
+Bam `Authentic` de quay ve provider goc va dung proxy.
 
 App tao backup lan dau tai:
 
