@@ -190,6 +190,7 @@ final class AppState: ObservableObject {
             let service = ModelRegistryStore()
             let fresh = try await service.refreshFromRouter(apiKey: key, targetBaseURL: url)
             models = fresh
+            try? codexService.writeModelCatalog(models: fresh)
             if !models.contains(where: { $0.codexSlug == selectedModelID }) {
                 selectedModelID = models.first?.codexSlug ?? selectedModelID
             }

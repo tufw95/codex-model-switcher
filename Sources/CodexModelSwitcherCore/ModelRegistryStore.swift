@@ -99,24 +99,22 @@ public final class ModelRegistryStore {
         return merged
     }
 
-    private static func model(fromRouterItem item: [String: Any]) -> RouterModel? {
+    static func model(fromRouterItem item: [String: Any]) -> RouterModel? {
         let rawID = (item["id"] as? String) ?? (item["slug"] as? String) ?? (item["model"] as? String)
         guard let rawID, !rawID.isEmpty else {
             return nil
         }
 
-        let upstream = rawID.hasPrefix("cx/") ? rawID : "cx/\(RouterModel.normalizeSlug(rawID))"
+        let normalized = RouterModel.normalizeSlug(rawID)
+        let upstream = normalized.hasPrefix("cx/") ? normalized : "cx/\(normalized)"
         let codexSlug = upstream.hasPrefix("cx/") ? String(upstream.dropFirst(3)) : upstream
-        let displayName = (item["display_name"] as? String)
-            ?? (item["name"] as? String)
-            ?? RouterModel.displayName(for: codexSlug)
         return RouterModel(
             codexSlug: codexSlug,
-            displayName: displayName,
+            displayName: displayName(fromRouterItem: item, codexSlug: codexSlug),
             upstreamModel: upstream,
             aliases: ["openai/\(codexSlug)"],
             visible: true,
-            priority: item["priority"] as? Int ?? 100
+            priority: item["priority"] as? Int ?? RouterModel.defaultPriority(for: codexSlug)
         )
     }
 
@@ -136,18 +134,43 @@ public final class ModelRegistryStore {
         return components?.url ?? baseURL.appendingPathComponent("v1").appendingPathComponent("models")
     }
 
-    private func merge(routerModels: [RouterModel], localModels: [RouterModel]) -> [RouterModel] {
+    func merge(routerModels: [RouterModel], localModels: [RouterModel]) -> [RouterModel] {
         var merged = Dictionary(uniqueKeysWithValues: localModels.map { ($0.codexSlug, $0) })
         for routerModel in routerModels {
             if var existing = merged[routerModel.codexSlug] {
                 existing.displayName = routerModel.displayName
                 existing.upstreamModel = routerModel.upstreamModel
+                existing.aliases = routerModel.aliases
+                existing.priority = routerModel.priority
                 existing.visible = true
                 merged[routerModel.codexSlug] = existing
             } else {
                 merged[routerModel.codexSlug] = routerModel
             }
         }
-        return Array(merged.values).sorted { $0.priority < $1.priority }
+        return Array(merged.values).sorted { lhs, rhs in
+            if lhs.priority == rhs.priority {
+                return lhs.codexSlug < rhs.codexSlug
+            }
+            return lhs.priority < rhs.priority
+        }
+    }
+
+    private static func displayName(fromRouterItem item: [String: Any], codexSlug: String) -> String {
+        if codexSlug == "codex" {
+            return RouterModel.displayName(for: codexSlug)
+        }
+
+        let rawName = ((item["display_name"] as? String) ?? (item["name"] as? String) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawName.isEmpty else {
+            return RouterModel.displayName(for: codexSlug)
+        }
+
+        let normalizedRawName = RouterModel.normalizeSlug(rawName)
+        if normalizedRawName == codexSlug || rawName == rawName.uppercased() {
+            return RouterModel.displayName(for: codexSlug)
+        }
+        return rawName
     }
 }

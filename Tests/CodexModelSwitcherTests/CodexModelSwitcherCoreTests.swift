@@ -10,6 +10,43 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertTrue(model.aliases.contains("openai/gpt-5.6"))
     }
 
+    func testRouterDisplayNamesAndPrioritiesPreferComboAndLatestModels() {
+        XCTAssertEqual(RouterModel.displayName(for: "cx/codex"), "Codex (9Router Combo)")
+        XCTAssertEqual(RouterModel.displayName(for: "gpt-5.6-sol-review"), "GPT-5.6 Sol Review")
+        XCTAssertLessThan(RouterModel.defaultPriority(for: "codex"), RouterModel.defaultPriority(for: "gpt-5.6-sol"))
+        XCTAssertLessThan(RouterModel.defaultPriority(for: "gpt-5.6-sol"), RouterModel.defaultPriority(for: "gpt-5.5"))
+    }
+
+    func testRouterRefreshModelsReplaceStaleLocalPriorities() throws {
+        let combo = try XCTUnwrap(ModelRegistryStore.model(fromRouterItem: [
+            "id": "cx/codex",
+            "display_name": "CODEX"
+        ]))
+        let sol = try XCTUnwrap(ModelRegistryStore.model(fromRouterItem: [
+            "id": "cx/gpt-5.6-sol",
+            "display_name": "GPT-5.6-SOL"
+        ]))
+        let legacy = try XCTUnwrap(ModelRegistryStore.model(fromRouterItem: [
+            "id": "cx/gpt-5.5",
+            "display_name": "GPT-5.5"
+        ]))
+
+        let staleLocalModel = RouterModel(
+            codexSlug: "gpt-5.5",
+            displayName: "GPT-5.5",
+            upstreamModel: "cx/gpt-5.5",
+            priority: 0
+        )
+        let merged = ModelRegistryStore().merge(
+            routerModels: [legacy, sol, combo],
+            localModels: [staleLocalModel]
+        )
+
+        XCTAssertEqual(merged.map(\.codexSlug), ["codex", "gpt-5.6-sol", "gpt-5.5"])
+        XCTAssertEqual(combo.displayName, "Codex (9Router Combo)")
+        XCTAssertEqual(sol.displayName, "GPT-5.6 Sol")
+    }
+
     func testConfigRewritePreservesUnrelatedSections() {
         let existing = """
         model_provider = "Old"

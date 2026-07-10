@@ -37,14 +37,14 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
             displayName: "GPT-5.5",
             upstreamModel: "cx/gpt-5.5",
             aliases: ["openai/gpt-5.5"],
-            priority: 0
+            priority: defaultPriority(for: "gpt-5.5")
         ),
         RouterModel(
             codexSlug: "gpt-5.4",
             displayName: "GPT-5.4",
             upstreamModel: "cx/gpt-5.4",
             aliases: ["openai/gpt-5.4"],
-            priority: 10
+            priority: defaultPriority(for: "gpt-5.4")
         ),
         RouterModel(
             codexSlug: "gpt-5.4-mini",
@@ -52,7 +52,7 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
             upstreamModel: "cx/gpt-5.4-mini",
             aliases: ["openai/gpt-5.4-mini"],
             visible: false,
-            priority: 20
+            priority: defaultPriority(for: "gpt-5.4-mini")
         )
     ]
 
@@ -65,7 +65,7 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
             displayName: displayName(for: codexSlug),
             upstreamModel: upstream,
             aliases: ["openai/\(codexSlug)"],
-            priority: 100
+            priority: defaultPriority(for: codexSlug)
         )
     }
 
@@ -93,15 +93,71 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
     }
 
     public static func displayName(for slug: String) -> String {
-        slug
-            .split(separator: "-")
-            .map { part in
-                if part == "gpt" { return "GPT" }
-                if part == "mini" { return "Mini" }
-                return String(part).uppercased()
+        let normalized = normalizeSlug(slug)
+        let clean = normalized.hasPrefix("cx/") ? String(normalized.dropFirst(3)) : normalized
+        if clean == "codex" {
+            return "Codex (9Router Combo)"
+        }
+
+        let parts = clean.split(separator: "-").map(String.init)
+        var words: [String] = []
+        var index = 0
+        while index < parts.count {
+            let part = parts[index]
+            if part == "gpt" {
+                if index + 1 < parts.count, parts[index + 1].contains(".") {
+                    words.append("GPT-\(parts[index + 1])")
+                    index += 2
+                    continue
+                }
+                words.append("GPT")
+            } else {
+                words.append(displayWord(for: part))
             }
-            .joined(separator: "-")
-            .replacingOccurrences(of: "-Mini", with: " Mini")
+            index += 1
+        }
+        return words.joined(separator: " ")
+    }
+
+    public static func defaultPriority(for slug: String) -> Int {
+        let normalized = normalizeSlug(slug)
+        let clean = normalized.hasPrefix("cx/") ? String(normalized.dropFirst(3)) : normalized
+        if clean == "codex" {
+            return 0
+        }
+
+        let reviewOffset = clean.contains("-review") ? 1 : 0
+        let variantOffset: Int
+        if clean.contains("-sol") {
+            variantOffset = 0
+        } else if clean.contains("-terra") {
+            variantOffset = 2
+        } else if clean.contains("-luna") {
+            variantOffset = 4
+        } else {
+            variantOffset = 6
+        }
+
+        if let version = gptVersion(from: clean), version.major == 5 {
+            let base: Int
+            switch version.minor {
+            case 6:
+                base = 10
+            case 5:
+                base = 40
+            case 4:
+                base = 50
+            case 3:
+                base = 60
+            case 7...:
+                base = max(2, 10 - ((version.minor - 6) * 4))
+            default:
+                base = 80 + max(0, 3 - version.minor) * 10
+            }
+            return base + variantOffset + reviewOffset
+        }
+
+        return 200 + variantOffset + reviewOffset
     }
 
     public var rewriteInputs: [String] {
@@ -113,6 +169,45 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
             seen.insert(value)
             return true
         }
+    }
+
+    private static func displayWord(for part: String) -> String {
+        switch part {
+        case "mini":
+            return "Mini"
+        case "codex":
+            return "Codex"
+        case "review":
+            return "Review"
+        case "xhigh":
+            return "X High"
+        case "low":
+            return "Low"
+        case "medium":
+            return "Medium"
+        case "high":
+            return "High"
+        default:
+            guard let first = part.first else { return part }
+            return String(first).uppercased() + String(part.dropFirst())
+        }
+    }
+
+    private static func gptVersion(from slug: String) -> (major: Int, minor: Int)? {
+        guard slug.hasPrefix("gpt-") else {
+            return nil
+        }
+        let suffix = slug.dropFirst("gpt-".count)
+        guard let versionText = suffix.split(separator: "-", maxSplits: 1).first else {
+            return nil
+        }
+        let parts = versionText.split(separator: ".")
+        guard parts.count >= 2,
+              let major = Int(parts[0]),
+              let minor = Int(parts[1]) else {
+            return nil
+        }
+        return (major, minor)
     }
 }
 

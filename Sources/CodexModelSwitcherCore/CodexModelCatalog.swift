@@ -35,7 +35,12 @@ public enum CodexModelCatalog {
             ?? sourceModels.first
 
         let outputModels = models
-            .sorted { $0.priority < $1.priority }
+            .sorted { lhs, rhs in
+                if lhs.priority == rhs.priority {
+                    return lhs.codexSlug < rhs.codexSlug
+                }
+                return lhs.priority < rhs.priority
+            }
             .map { model in
                 modelEntry(for: model, exactTemplate: sourceBySlug[model.codexSlug], fallbackTemplate: fallbackTemplate)
             }

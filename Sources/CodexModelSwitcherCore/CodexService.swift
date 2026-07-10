@@ -270,6 +270,14 @@ public final class CodexService {
         _ = try? Shell.run("/usr/bin/pkill", ["-f", "CodexModelSwitcher --proxy"], requireSuccess: false)
     }
 
+    public func writeModelCatalog(models: [RouterModel]) throws {
+        try CodexModelCatalog.write(
+            models: models,
+            to: paths.generatedModelCatalog,
+            codexCLI: detectCodexCLI()
+        )
+    }
+
     private func startProxy(selectedModel: RouterModel, allModels: [RouterModel]) throws {
         guard let proxyExecutable = proxyExecutableURL(),
               FileManager.default.isExecutableFile(atPath: proxyExecutable.path) else {
@@ -456,8 +464,7 @@ public final class CodexService {
     }
 
     private func restartCodex(openNewThread: Bool, codexCLI: URL?) throws {
-        _ = try? Shell.run("/usr/bin/killall", ["Codex"], requireSuccess: false)
-        Thread.sleep(forTimeInterval: 0.6)
+        let previouslyRunning = quitCodexApps()
 
         if let codexCLI {
             _ = try? Shell.run(codexCLI.path, ["app-server", "daemon", "restart"], requireSuccess: false)
@@ -467,7 +474,76 @@ public final class CodexService {
         }
 
         if openNewThread {
-            try Shell.run("/usr/bin/open", ["codex://threads/new"], requireSuccess: false)
+            _ = try? Shell.run("/usr/bin/open", ["codex://threads/new"], requireSuccess: false)
+            Thread.sleep(forTimeInterval: 1.0)
+            if !isAnyCodexAppRunning() {
+                reopenCodexApp(previouslyRunning: previouslyRunning)
+                Thread.sleep(forTimeInterval: 0.8)
+                _ = try? Shell.run("/usr/bin/open", ["codex://threads/new"], requireSuccess: false)
+            }
+        } else {
+            reopenCodexApp(previouslyRunning: previouslyRunning)
+        }
+    }
+
+    private struct ManagedCodexApp {
+        var processName: String
+        var applicationName: String
+    }
+
+    private var managedCodexApps: [ManagedCodexApp] {
+        [
+            ManagedCodexApp(processName: "ChatGPT", applicationName: "ChatGPT"),
+            ManagedCodexApp(processName: "Codex", applicationName: "Codex")
+        ]
+    }
+
+    private func quitCodexApps() -> [ManagedCodexApp] {
+        let running = runningCodexApps()
+        for app in running {
+            _ = try? Shell.run(
+                "/usr/bin/osascript",
+                ["-e", "tell application \"\(app.applicationName)\" to quit"],
+                requireSuccess: false
+            )
+        }
+
+        waitForCodexAppsToExit(timeout: 2.0)
+        for app in running where isProcessRunning(app.processName) {
+            _ = try? Shell.run("/usr/bin/killall", [app.processName], requireSuccess: false)
+        }
+        waitForCodexAppsToExit(timeout: 1.0)
+        return running
+    }
+
+    private func reopenCodexApp(previouslyRunning: [ManagedCodexApp]) {
+        let preferred = previouslyRunning.first ?? managedCodexApps.first
+        guard let preferred else {
+            return
+        }
+        _ = try? Shell.run("/usr/bin/open", ["-a", preferred.applicationName], requireSuccess: false)
+    }
+
+    private func runningCodexApps() -> [ManagedCodexApp] {
+        managedCodexApps.filter { isProcessRunning($0.processName) }
+    }
+
+    private func isAnyCodexAppRunning() -> Bool {
+        managedCodexApps.contains { isProcessRunning($0.processName) }
+    }
+
+    private func isProcessRunning(_ processName: String) -> Bool {
+        let result = try? Shell.run("/usr/bin/pgrep", ["-x", processName], requireSuccess: false)
+        return result?.succeeded == true
+    }
+
+    private func waitForCodexAppsToExit(timeout: TimeInterval) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !isAnyCodexAppRunning() {
+                return
+            }
+            Thread.sleep(forTimeInterval: 0.2)
         }
     }
 
