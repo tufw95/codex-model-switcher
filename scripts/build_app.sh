@@ -18,7 +18,14 @@ case "$AUTO_REFRESH_MODELS_ON_LAUNCH" in
 esac
 
 xml_escape() {
-  python3 -c 'import html,sys; print(html.escape(sys.stdin.read(), quote=True), end="")'
+  local value
+  value="$(cat)"
+  value="${value//&/&amp;}"
+  value="${value//</&lt;}"
+  value="${value//>/&gt;}"
+  value="${value//\"/&quot;}"
+  value="${value//\'/&apos;}"
+  printf '%s' "$value"
 }
 
 ESCAPED_UPDATE_MANIFEST_URL="$(printf '%s' "$UPDATE_MANIFEST_URL" | xml_escape)"
@@ -64,7 +71,6 @@ rm -rf "$STAGE_APP_DIR"
 mkdir -p "$STAGE_APP_DIR/Contents/MacOS" "$STAGE_APP_DIR/Contents/Resources"
 
 cp "$BIN_DIR/$EXECUTABLE_NAME" "$STAGE_APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
-cp "$ROOT_DIR/Sources/CodexModelSwitcherCore/Resources/codex_9router_proxy.py" "$STAGE_APP_DIR/Contents/Resources/codex_9router_proxy.py"
 chmod +x "$STAGE_APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
 
 if [[ -f "$ROOT_DIR/Assets/AppIcon.icns" ]]; then

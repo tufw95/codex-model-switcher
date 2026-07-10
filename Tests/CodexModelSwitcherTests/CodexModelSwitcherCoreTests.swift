@@ -39,6 +39,35 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertEqual(rewritten.components(separatedBy: "[model_providers.NineRouter]").count, 2)
     }
 
+    func testAuthenticConfigRemovesNineRouterProvider() {
+        let existing = """
+        model_provider = "NineRouter"
+        model = "codex"
+        model_catalog_json = "/Users/example/.codex/9router-model-catalog.json"
+
+        [model_providers.NineRouter]
+        name = "9Router"
+        base_url = "http://127.0.0.1:9783/v1"
+
+        [projects."/tmp"]
+        trust_level = "trusted"
+        """
+
+        let rewritten = CodexConfigRewriter.rewriteModelConfig(
+            existing: existing,
+            profile: .authenticCodex,
+            model: RouterModel.inferred(from: "gpt-5.5"),
+            catalogPath: "/Users/example/.codex/9router-model-catalog.json",
+            proxyBaseURL: "http://127.0.0.1:9783/v1"
+        )
+
+        XCTAssertFalse(rewritten.contains("model_provider = \"NineRouter\""))
+        XCTAssertFalse(rewritten.contains("model_catalog_json"))
+        XCTAssertFalse(rewritten.contains("[model_providers.NineRouter]"))
+        XCTAssertTrue(rewritten.contains("model = \"gpt-5.5\""))
+        XCTAssertTrue(rewritten.contains("[projects.\"/tmp\"]"))
+    }
+
     func testCatalogBuilderSynthesizesCustomModel() throws {
         let models = [
             RouterModel.inferred(from: "gpt 5.6")

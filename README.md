@@ -7,11 +7,12 @@ Native macOS app for switching Codex between the authentic provider and a 9Route
 - Runs as a SwiftUI menu bar-only macOS app.
 - Saves `NINEROUTER_API_KEY` once to `~/.codex/.env` and exports it through `launchctl`.
 - Generates `~/.codex/9router-model-catalog.json` so custom models appear in the Codex model picker.
-- Starts a local LaunchAgent proxy on `127.0.0.1:9783`.
+- Starts a local Swift LaunchAgent proxy on `127.0.0.1:9783`.
 - Rewrites Codex config safely while preserving unrelated settings.
 - Keeps the Chrome/node_repl repair logic from the original AppleScript bundle.
 - Checks an update manifest and shows a macOS notification when a newer version is available.
 - Keeps each user's 9Router API key local to their Mac.
+- Prefers the 9Router `Codex` combo when available, so combo ordering can route to the newest models such as `gpt-5.6-*`.
 
 ## Daily Use
 
@@ -30,6 +31,7 @@ The app converts `gpt 5.6` to:
 ```
 
 Codex then sees `gpt-5.6` in its model picker, while the proxy forwards requests to `cx/gpt-5.6`.
+If 9Router exposes a `Codex` combo, the app routes through `cx/codex` by default.
 
 ## Build
 

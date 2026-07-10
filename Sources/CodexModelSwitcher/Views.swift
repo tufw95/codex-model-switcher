@@ -11,46 +11,32 @@ struct CompactSwitchView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "switch.2")
-                    .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .background(
-                        LinearGradient(
-                            colors: [Color(red: 0.05, green: 0.46, blue: 0.63), Color(red: 0.12, green: 0.65, blue: 0.42)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: usingNineRouter ? "point.3.connected.trianglepath.dotted" : "switch.2")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(usingNineRouter ? .green : .blue)
+                    .frame(width: 26, height: 26)
+                    .background((usingNineRouter ? Color.green : Color.blue).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text("Codex Switch")
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                    Text(usingNineRouter ? "9Router is active" : "Authentic Codex is active")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(usingNineRouter ? "Routing through 9Router" : "Using authentic Codex")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-
                 Spacer()
-
-                Text(usingNineRouter ? "9Router" : "Codex")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(usingNineRouter ? Color.green : Color.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                Circle()
+                    .fill(usingNineRouter ? Color.green : Color.blue)
+                    .frame(width: 8, height: 8)
             }
 
-            Divider()
-
             if !app.status.apiKeyAvailable || editingAPIKey {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("9ROUTER API KEY")
-                        .font(.system(size: 12, weight: .bold))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("9Router API key")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
 
                     SecureField("Paste API key once", text: $app.apiKeyInput)
@@ -63,7 +49,7 @@ struct CompactSwitchView: View {
                         }
 
                     HStack {
-                        Text("Saved locally on this Mac")
+                        Text("Stored locally on this Mac")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -78,18 +64,16 @@ struct CompactSwitchView: View {
                     }
                 }
 
-                Divider()
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("CHOOSE MODE")
-                    .font(.system(size: 12, weight: .bold))
+                Text("Mode")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
 
-                HStack(spacing: 12) {
+                HStack(spacing: 6) {
                     ModeButton(
                         title: "9Router",
-                        subtitle: "Team API",
                         systemImage: "point.3.connected.trianglepath.dotted",
                         isActive: usingNineRouter,
                         isBusy: app.isBusy
@@ -99,7 +83,6 @@ struct CompactSwitchView: View {
 
                     ModeButton(
                         title: "Authentic",
-                        subtitle: "OpenAI",
                         systemImage: "sparkles",
                         isActive: !usingNineRouter,
                         isBusy: app.isBusy
@@ -152,14 +135,13 @@ struct CompactSwitchView: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .padding(22)
+        .padding(14)
         .background(.regularMaterial)
     }
 }
 
 struct ModeButton: View {
     let title: String
-    let subtitle: String
     let systemImage: String
     let isActive: Bool
     let isBusy: Bool
@@ -167,18 +149,15 @@ struct ModeButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                Text(subtitle)
-                    .font(.caption)
-                    .opacity(0.85)
+                    .font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(isActive ? .white : .primary)
-            .frame(maxWidth: .infinity, minHeight: 108)
-            .background(isActive ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .background(isActive ? Color.accentColor : Color(nsColor: .controlBackgroundColor).opacity(0.9))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)

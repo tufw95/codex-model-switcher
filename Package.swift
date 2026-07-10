@@ -12,12 +12,7 @@ let package = Package(
         .library(name: "CodexModelSwitcherCore", targets: ["CodexModelSwitcherCore"])
     ],
     targets: [
-        .target(
-            name: "CodexModelSwitcherCore",
-            resources: [
-                .copy("Resources/codex_9router_proxy.py")
-            ]
-        ),
+        .target(name: "CodexModelSwitcherCore"),
         .executableTarget(
             name: "CodexModelSwitcher",
             dependencies: ["CodexModelSwitcherCore"]

@@ -66,28 +66,4 @@ public struct AppPaths: Sendable {
         try FileManager.default.createDirectory(at: launchAgents, withIntermediateDirectories: true)
     }
 
-    public static func bundledProxyScript() throws -> URL {
-        let fileManager = FileManager.default
-        if let mainURL = Bundle.main.url(forResource: "codex_9router_proxy", withExtension: "py"),
-           fileManager.fileExists(atPath: mainURL.path) {
-            return mainURL
-        }
-
-        #if SWIFT_PACKAGE
-        if let moduleURL = Bundle.module.url(forResource: "codex_9router_proxy", withExtension: "py"),
-           fileManager.fileExists(atPath: moduleURL.path) {
-            return moduleURL
-        }
-        #endif
-
-        let sourceFallback = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("Sources/CodexModelSwitcherCore/Resources/codex_9router_proxy.py")
-        if fileManager.fileExists(atPath: sourceFallback.path) {
-            return sourceFallback
-        }
-
-        throw CocoaError(.fileNoSuchFile, userInfo: [
-            NSFilePathErrorKey: "codex_9router_proxy.py"
-        ])
-    }
 }

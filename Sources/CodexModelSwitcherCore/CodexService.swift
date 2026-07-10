@@ -33,7 +33,7 @@ public enum CodexServiceError: Error, LocalizedError {
         case .missingAPIKey:
             return "Missing 9Router API key. Paste it once and the app will save it to ~/.codex/.env."
         case .missingProxyScript:
-            return "Could not locate codex_9router_proxy.py inside the app bundle."
+            return "Could not locate the Codex Model Switcher executable for Swift proxy mode."
         case let .proxyDidNotStart(logPath):
             return "The local 9Router proxy did not start. See \(logPath)."
         }
@@ -121,17 +121,17 @@ public final class CodexService {
             ))
         }
 
-        if let proxyScript = try? AppPaths.bundledProxyScript(),
-           FileManager.default.fileExists(atPath: proxyScript.path) {
+        if let proxyExecutable = proxyExecutableURL(),
+           FileManager.default.isExecutableFile(atPath: proxyExecutable.path) {
             checks.append(PreflightCheck(
-                title: "Proxy script",
-                message: "Proxy script is bundled.",
+                title: "Swift proxy",
+                message: "Swift proxy executable is available.",
                 status: .passed
             ))
         } else {
             checks.append(PreflightCheck(
-                title: "Proxy script",
-                message: "codex_9router_proxy.py is missing from the app bundle.",
+                title: "Swift proxy",
+                message: "Could not locate the app executable for proxy mode.",
                 status: .failed
             ))
         }
@@ -187,7 +187,7 @@ public final class CodexService {
     }
 
     public func switchToAuthenticCodex(
-        model: RouterModel,
+        model: RouterModel = RouterModel.inferred(from: "gpt-5.5"),
         openNewThread: Bool = true
     ) throws {
         try paths.ensureBaseDirectories()
@@ -267,17 +267,17 @@ public final class CodexService {
         let domain = launchDomain()
         _ = try? Shell.run("/bin/launchctl", ["bootout", domain, paths.proxyLaunchAgent.path], requireSuccess: false)
         _ = try? Shell.run("/bin/launchctl", ["bootout", domain, paths.legacyProxyLaunchAgent.path], requireSuccess: false)
-        _ = try? Shell.run("/usr/bin/pkill", ["-f", "codex_9router_proxy.py"], requireSuccess: false)
+        _ = try? Shell.run("/usr/bin/pkill", ["-f", "CodexModelSwitcher --proxy"], requireSuccess: false)
     }
 
     private func startProxy(selectedModel: RouterModel, allModels: [RouterModel]) throws {
-        let proxyScript = try AppPaths.bundledProxyScript()
-        guard FileManager.default.fileExists(atPath: proxyScript.path) else {
+        guard let proxyExecutable = proxyExecutableURL(),
+              FileManager.default.isExecutableFile(atPath: proxyExecutable.path) else {
             throw CodexServiceError.missingProxyScript
         }
 
         try writeProxyLaunchAgent(
-            proxyScript: proxyScript,
+            proxyExecutable: proxyExecutable,
             selectedModel: selectedModel,
             allModels: allModels
         )
@@ -285,7 +285,7 @@ public final class CodexService {
         let domain = launchDomain()
         _ = try? Shell.run("/bin/launchctl", ["bootout", domain, paths.proxyLaunchAgent.path], requireSuccess: false)
         _ = try? Shell.run("/bin/launchctl", ["bootout", domain, paths.legacyProxyLaunchAgent.path], requireSuccess: false)
-        _ = try? Shell.run("/usr/bin/pkill", ["-f", proxyScript.path], requireSuccess: false)
+        _ = try? Shell.run("/usr/bin/pkill", ["-f", "CodexModelSwitcher --proxy"], requireSuccess: false)
         try Shell.run("/bin/launchctl", ["bootstrap", domain, paths.proxyLaunchAgent.path], requireSuccess: false)
         try Shell.run("/bin/launchctl", ["kickstart", "-k", "\(domain)/com.bigroll.codex-model-switcher.proxy"], requireSuccess: false)
         Thread.sleep(forTimeInterval: 1.0)
@@ -296,13 +296,13 @@ public final class CodexService {
     }
 
     private func writeProxyLaunchAgent(
-        proxyScript: URL,
+        proxyExecutable: URL,
         selectedModel: RouterModel,
         allModels: [RouterModel]
     ) throws {
         var arguments = [
-            "/usr/bin/python3",
-            proxyScript.path,
+            proxyExecutable.path,
+            "--proxy",
             "--port",
             "\(proxyPort)",
             "--target",
@@ -335,6 +335,19 @@ public final class CodexService {
         let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
         try FileManager.default.createDirectory(at: paths.launchAgents, withIntermediateDirectories: true)
         try data.write(to: paths.proxyLaunchAgent, options: .atomic)
+    }
+
+    private func proxyExecutableURL() -> URL? {
+        if let executable = Bundle.main.executableURL,
+           FileManager.default.isExecutableFile(atPath: executable.path) {
+            return executable
+        }
+
+        let argv0 = CommandLine.arguments.first ?? ""
+        if !argv0.isEmpty, FileManager.default.isExecutableFile(atPath: argv0) {
+            return URL(fileURLWithPath: argv0)
+        }
+        return nil
     }
 
     private func rewriteConfig(profile: CodexProfile, model: RouterModel) throws {

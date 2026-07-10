@@ -60,6 +60,19 @@ final class AppState: ObservableObject {
         models.first(where: { $0.codexSlug == selectedModelID }) ?? models.first ?? RouterModel.defaults[0]
     }
 
+    var preferredNineRouterModel: RouterModel {
+        if let combo = models.first(where: { $0.codexSlug.caseInsensitiveCompare("codex") == .orderedSame }) {
+            return combo
+        }
+        if let latest = models
+            .filter({ $0.codexSlug.contains("gpt-5.6") && !$0.codexSlug.contains("review") })
+            .sorted(by: { $0.codexSlug < $1.codexSlug })
+            .first {
+            return latest
+        }
+        return selectedModel
+    }
+
     var currentVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     }
@@ -202,11 +215,12 @@ final class AppState: ObservableObject {
             statusMessage = "Preparing 9Router"
             await refreshModelsFromRouter(silent: true, showProgress: false)
             let apiKey = apiKeyInput.contains("...") ? codexService.readAPIKey() : apiKeyInput
-            let model = selectedModel
+            let model = preferredNineRouterModel
             let allModels = models
             do {
                 try codexService.switchToNineRouter(selectedModel: model, allModels: allModels, apiKey: apiKey)
-                statusMessage = "Codex is now using 9Router"
+                selectedModelID = model.codexSlug
+                statusMessage = "Codex is now using 9Router: \(model.displayName)"
                 errorMessage = nil
             } catch {
                 errorMessage = error.localizedDescription
@@ -231,9 +245,8 @@ final class AppState: ObservableObject {
     }
 
     func switchToAuthenticCodex() {
-        let model = selectedModel
         run("Switching Codex to authentic provider") {
-            try codexService.switchToAuthenticCodex(model: model)
+            try codexService.switchToAuthenticCodex()
             return "Codex is now using the authentic provider"
         }
     }

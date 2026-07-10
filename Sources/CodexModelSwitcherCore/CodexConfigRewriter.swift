@@ -61,15 +61,17 @@ public enum CodexConfigRewriter {
             output += "\n" + body
         }
 
-        output += """
+        if profile == .nineRouter {
+            output += """
 
 
-        [model_providers.NineRouter]
-        name = "9Router"
-        base_url = "\(escape(proxyBaseURL))"
-        env_key = "NINEROUTER_API_KEY"
-        wire_api = "responses"
-        """
+            [model_providers.NineRouter]
+            name = "9Router"
+            base_url = "\(escape(proxyBaseURL))"
+            env_key = "NINEROUTER_API_KEY"
+            wire_api = "responses"
+            """
+        }
         return normalized(output)
     }
 
