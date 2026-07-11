@@ -46,7 +46,10 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
             localModels: [staleLocalModel]
         )
 
-        XCTAssertEqual(merged.map(\.codexSlug), ["codex", "gpt-5.6-sol", "gpt-5.5"])
+        XCTAssertEqual(
+            merged.map(\.codexSlug),
+            ["codex", "gpt-5.6-sol", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"]
+        )
         XCTAssertEqual(combo.displayName, "Codex")
         XCTAssertEqual(combo.upstreamModel, "Codex")
         XCTAssertFalse(combo.visible)
@@ -61,14 +64,21 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
             ["id": "cx/gpt-5.4-mini", "owned_by": "cx"],
             ["id": "cx/gpt-5.5", "owned_by": "cx"],
             ["id": "cx/gpt-5.6-terra", "owned_by": "cx"],
-            ["id": "cx/gpt-5.3-codex", "owned_by": "cx"],
             ["id": "cx/gpt-5.6-sol", "owned_by": "cx"],
-            ["id": "cx/gpt-5.4", "owned_by": "cx"],
             ["id": "cx/gpt-5.6-luna", "owned_by": "cx"]
         ]
 
-        let visibleNames = items
-            .compactMap(ModelRegistryStore.model(fromRouterItem:))
+        let staleLocalModel = RouterModel(
+            codexSlug: "gpt-5.3-codex",
+            displayName: "GPT-5.3-CODEX",
+            upstreamModel: "cx/gpt-5.3-codex",
+            visible: true
+        )
+        let merged = ModelRegistryStore().merge(
+            routerModels: items.compactMap(ModelRegistryStore.model(fromRouterItem:)),
+            localModels: [staleLocalModel]
+        )
+        let visibleNames = merged
             .filter(\.visible)
             .sorted { $0.priority < $1.priority }
             .map(\.displayName)

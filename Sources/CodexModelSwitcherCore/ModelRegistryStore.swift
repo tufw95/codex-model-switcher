@@ -61,9 +61,11 @@ public final class ModelRegistryStore {
             models[index].displayName = inferred.displayName
             models[index].upstreamModel = inferred.upstreamModel
             models[index].visible = true
+            models[index].notes = "Manual"
         } else {
             var next = inferred
             next.priority = (models.map(\.priority).max() ?? 90) + 10
+            next.notes = "Manual"
             models.append(next)
         }
         try save(models)
@@ -140,7 +142,10 @@ public final class ModelRegistryStore {
     }
 
     func merge(routerModels: [RouterModel], localModels: [RouterModel]) -> [RouterModel] {
-        var merged = Dictionary(uniqueKeysWithValues: localModels.map { ($0.codexSlug, $0) })
+        var merged = Dictionary(uniqueKeysWithValues: RouterModel.defaults.map { ($0.codexSlug, $0) })
+        for localModel in localModels where localModel.notes == "Manual" {
+            merged[localModel.codexSlug] = localModel
+        }
         for routerModel in routerModels {
             if var existing = merged[routerModel.codexSlug] {
                 existing.displayName = routerModel.displayName

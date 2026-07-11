@@ -354,8 +354,11 @@ final class AppState: ObservableObject {
             return
         }
 
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
+        Task.detached(priority: .utility) {
+            let center = UNUserNotificationCenter.current()
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else {
+                return
+            }
             let content = UNMutableNotificationContent()
             content.title = "Codex Model Switcher \(manifest.version)"
             content.body = manifest.message ?? "A new version is ready to download."
@@ -365,9 +368,11 @@ final class AppState: ObservableObject {
                 content: content,
                 trigger: nil
             )
-            UNUserNotificationCenter.current().add(request) { error in
-                guard error == nil else { return }
+            do {
+                try await center.add(request)
                 UserDefaults.standard.set(manifest.version, forKey: notificationKey)
+            } catch {
+                return
             }
         }
     }
@@ -384,7 +389,9 @@ final class AppState: ObservableObject {
     }
 
     private func requestUpdateNotificationAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        Task.detached(priority: .utility) {
+            _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+        }
     }
 
     private func startPeriodicUpdateChecks() {
