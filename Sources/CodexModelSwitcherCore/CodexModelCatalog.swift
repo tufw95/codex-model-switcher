@@ -20,19 +20,18 @@ public enum CodexModelCatalog {
         existingCatalogURL: URL?,
         codexCLI: URL?
     ) throws -> Data {
-        let sourceCatalog = loadCatalog(from: existingCatalogURL)
-            ?? loadBundledCatalog(codexCLI: codexCLI)
-            ?? [:]
+        let bundledModels = catalogModels(from: loadBundledCatalog(codexCLI: codexCLI))
+        let existingModels = catalogModels(from: loadCatalog(from: existingCatalogURL))
+        let bundledBySlug = modelsBySlug(bundledModels)
+        let existingBySlug = modelsBySlug(existingModels)
 
-        let sourceModels = sourceCatalog["models"] as? [[String: Any]] ?? []
-        let sourceBySlug = Dictionary(uniqueKeysWithValues: sourceModels.compactMap { item -> (String, [String: Any])? in
-            guard let slug = item["slug"] as? String else { return nil }
-            return (slug, item)
-        })
-
-        let fallbackTemplate = sourceBySlug["gpt-5.5"]
-            ?? sourceBySlug["gpt-5.4"]
-            ?? sourceModels.first
+        let bundledFallback = bundledBySlug["gpt-5.5"]
+            ?? bundledBySlug["gpt-5.4"]
+            ?? bundledModels.first
+        let existingFallback = existingBySlug["gpt-5.5"]
+            ?? existingBySlug["gpt-5.4"]
+            ?? existingModels.first
+        let fallbackTemplate = bundledFallback ?? existingFallback
 
         let outputModels = models
             .sorted { lhs, rhs in
@@ -42,11 +41,23 @@ public enum CodexModelCatalog {
                 return lhs.priority < rhs.priority
             }
             .map { model in
-                modelEntry(for: model, exactTemplate: sourceBySlug[model.codexSlug], fallbackTemplate: fallbackTemplate)
+                let exactTemplate = bundledBySlug[model.codexSlug] ?? existingBySlug[model.codexSlug]
+                return modelEntry(for: model, exactTemplate: exactTemplate, fallbackTemplate: fallbackTemplate)
             }
 
         let output: [String: Any] = ["models": outputModels]
         return try JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    private static func catalogModels(from catalog: [String: Any]?) -> [[String: Any]] {
+        catalog?["models"] as? [[String: Any]] ?? []
+    }
+
+    private static func modelsBySlug(_ models: [[String: Any]]) -> [String: [String: Any]] {
+        Dictionary(uniqueKeysWithValues: models.compactMap { item -> (String, [String: Any])? in
+            guard let slug = item["slug"] as? String else { return nil }
+            return (slug, item)
+        })
     }
 
     private static func loadCatalog(from url: URL?) -> [String: Any]? {

@@ -160,4 +160,145 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertEqual(catalogModels?.first?["display_name"] as? String, "5.6")
         XCTAssertEqual(catalogModels?.first?["visibility"] as? String, "list")
     }
+
+    func testShellDrainsLargeStandardOutputAndErrorWithoutDeadlocking() throws {
+        let result = try Shell.run(
+            "/bin/sh",
+            [
+                "-c",
+                """
+                i=0
+                while [ "$i" -lt 10000 ]; do
+                  printf 'catalog-data\\n'
+                  printf 'diagnostic-data\\n' >&2
+                  i=$((i + 1))
+                done
+                """
+            ]
+        )
+
+        XCTAssertGreaterThan(result.stdout.utf8.count, 65_536)
+        XCTAssertGreaterThan(result.stderr.utf8.count, 65_536)
+    }
+
+    func testCatalogBuilderPrefersFreshBundledMetadataOverExistingCatalog() throws {
+        let existingCatalogURL = try temporaryFile(
+            named: "existing-catalog.json",
+            contents: """
+            {
+              "models": [{
+                "slug": "gpt-5.6-sol",
+                "display_name": "Old Sol",
+                "supported_reasoning_levels": [
+                  {"effort": "low", "description": "Low"},
+                  {"effort": "xhigh", "description": "Extra High"}
+                ]
+              }]
+            }
+            """
+        )
+        let fakeCLI = try temporaryExecutable(
+            named: "codex",
+            output: """
+            {
+              "models": [{
+                "slug": "gpt-5.6-sol",
+                "display_name": "GPT-5.6-SOL",
+                "supported_reasoning_levels": [
+                  {"effort": "low", "description": "Low"},
+                  {"effort": "medium", "description": "Medium"},
+                  {"effort": "high", "description": "High"},
+                  {"effort": "xhigh", "description": "Extra High"},
+                  {"effort": "max", "description": "Max"},
+                  {"effort": "ultra", "description": "Ultra"}
+                ],
+                "additional_speed_tiers": ["fast"],
+                "service_tiers": [{
+                  "id": "priority",
+                  "name": "Fast",
+                  "description": "1.5x speed, increased usage"
+                }]
+              }]
+            }
+            """
+        )
+
+        let data = try CodexModelCatalog.buildData(
+            models: [RouterModel.inferred(from: "gpt-5.6-sol")],
+            existingCatalogURL: existingCatalogURL,
+            codexCLI: fakeCLI
+        )
+        let model = try XCTUnwrap(catalogModel(from: data, slug: "gpt-5.6-sol"))
+        let levels = try XCTUnwrap(model["supported_reasoning_levels"] as? [[String: Any]])
+        XCTAssertEqual(levels.compactMap { $0["effort"] as? String }, ["low", "medium", "high", "xhigh", "max", "ultra"])
+        XCTAssertEqual(model["additional_speed_tiers"] as? [String], ["fast"])
+        XCTAssertEqual((model["service_tiers"] as? [[String: Any]])?.first?["id"] as? String, "priority")
+    }
+
+    func testCatalogBuilderKeepsExistingMetadataForRouterOnlyModel() throws {
+        let existingCatalogURL = try temporaryFile(
+            named: "custom-catalog.json",
+            contents: """
+            {
+              "models": [{
+                "slug": "gpt-5.7-team",
+                "display_name": "Old Team Name",
+                "supported_reasoning_levels": [
+                  {"effort": "low", "description": "Low"},
+                  {"effort": "high", "description": "High"}
+                ],
+                "custom_router_capability": true
+              }]
+            }
+            """
+        )
+        let fakeCLI = try temporaryExecutable(
+            named: "codex",
+            output: """
+            {
+              "models": [{
+                "slug": "gpt-5.6-sol",
+                "display_name": "GPT-5.6-SOL"
+              }]
+            }
+            """
+        )
+
+        let data = try CodexModelCatalog.buildData(
+            models: [RouterModel.inferred(from: "gpt-5.7-team")],
+            existingCatalogURL: existingCatalogURL,
+            codexCLI: fakeCLI
+        )
+        let model = try XCTUnwrap(catalogModel(from: data, slug: "gpt-5.7-team"))
+        XCTAssertEqual(model["display_name"] as? String, "5.7 Team")
+        XCTAssertEqual(model["custom_router_capability"] as? Bool, true)
+        let levels = try XCTUnwrap(model["supported_reasoning_levels"] as? [[String: Any]])
+        XCTAssertEqual(levels.compactMap { $0["effort"] as? String }, ["low", "high"])
+    }
+
+    private func catalogModel(from data: Data, slug: String) throws -> [String: Any]? {
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let models = json?["models"] as? [[String: Any]]
+        return models?.first { $0["slug"] as? String == slug }
+    }
+
+    private func temporaryFile(named name: String, contents: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodexModelSwitcherTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(name)
+        try Data(contents.utf8).write(to: url)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        return url
+    }
+
+    private func temporaryExecutable(named name: String, output: String) throws -> URL {
+        let escapedOutput = output.replacingOccurrences(of: "'", with: "'\\''")
+        let script = "#!/bin/sh\nprintf '%s' '\(escapedOutput)'\n"
+        let url = try temporaryFile(named: name, contents: script)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+        return url
+    }
 }

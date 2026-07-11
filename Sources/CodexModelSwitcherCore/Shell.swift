@@ -48,15 +48,48 @@ public enum Shell {
         process.standardError = stderrPipe
 
         try process.run()
+        let stdoutReader = PipeReader(pipe: stdoutPipe)
+        let stderrReader = PipeReader(pipe: stderrPipe)
+        stdoutReader.start()
+        stderrReader.start()
         process.waitUntilExit()
 
-        let stdout = String(data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let stdout = String(data: stdoutReader.waitForData(), encoding: .utf8) ?? ""
+        let stderr = String(data: stderrReader.waitForData(), encoding: .utf8) ?? ""
         let result = ShellResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)
 
         if requireSuccess && !result.succeeded {
             throw ShellError.failed(command: command, args: args, result: result)
         }
         return result
+    }
+}
+
+private final class PipeReader: @unchecked Sendable {
+    private let pipe: Pipe
+    private let group = DispatchGroup()
+    private let lock = NSLock()
+    private var data = Data()
+
+    init(pipe: Pipe) {
+        self.pipe = pipe
+    }
+
+    func start() {
+        group.enter()
+        DispatchQueue.global(qos: .utility).async { [self] in
+            let captured = pipe.fileHandleForReading.readDataToEndOfFile()
+            lock.lock()
+            data = captured
+            lock.unlock()
+            group.leave()
+        }
+    }
+
+    func waitForData() -> Data {
+        group.wait()
+        lock.lock()
+        defer { lock.unlock() }
+        return data
     }
 }
