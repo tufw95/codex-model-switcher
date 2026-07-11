@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 enum BrandAssets {
     static let appIcon: NSImage = {
         load(name: "AppIcon", extension: "icns")
