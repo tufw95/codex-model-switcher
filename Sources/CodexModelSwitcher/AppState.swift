@@ -1,6 +1,7 @@
 import AppKit
 import CodexModelSwitcherCore
 import Foundation
+import ServiceManagement
 import SwiftUI
 import UserNotifications
 
@@ -18,6 +19,7 @@ final class AppState: ObservableObject {
     @Published var apiKeyInput = ""
     @Published var newModelName = ""
     @Published var isBusy = false
+    @Published var isCheckingForUpdates = false
     @Published var statusMessage = "Ready"
     @Published var errorMessage: String?
     @Published var updateSettings: UpdateSettings
@@ -30,6 +32,7 @@ final class AppState: ObservableObject {
     private let updateService: UpdateService
     private let teamPreset: TeamPreset
     private var didBootstrap = false
+    private var updateMonitorTask: Task<Void, Never>?
 
     init(
         registry: ModelRegistryStore = ModelRegistryStore(),
@@ -61,20 +64,36 @@ final class AppState: ObservableObject {
     }
 
     var preferredNineRouterModel: RouterModel {
-        if let combo = models.first(where: { $0.codexSlug.caseInsensitiveCompare("codex") == .orderedSame }) {
-            return combo
+        if let sol = models.first(where: {
+            $0.visible && $0.codexSlug.caseInsensitiveCompare("gpt-5.6-sol") == .orderedSame
+        }) {
+            return sol
         }
         if let latest = models
-            .filter({ $0.codexSlug.contains("gpt-5.6") && !$0.codexSlug.contains("review") })
-            .sorted(by: { $0.codexSlug < $1.codexSlug })
+            .filter({ $0.visible && $0.codexSlug.contains("gpt-5.6") && !$0.codexSlug.contains("review") })
+            .sorted(by: { $0.priority < $1.priority })
             .first {
             return latest
+        }
+        if let visible = models.filter(\.visible).sorted(by: { $0.priority < $1.priority }).first {
+            return visible
+        }
+        if let combo = models.first(where: { $0.notes == "9Router Combo" }) {
+            return combo
         }
         return selectedModel
     }
 
     var currentVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    }
+
+    var currentBuild: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    }
+
+    var versionLabel: String {
+        "v\(currentVersion)"
     }
 
     func load() {
@@ -95,7 +114,10 @@ final class AppState: ObservableObject {
             return
         }
         didBootstrap = true
-        await checkForUpdates(silent: true)
+        configureLaunchAtLogin()
+        requestUpdateNotificationAuthorization()
+        await checkForUpdates(silent: true, force: true)
+        startPeriodicUpdateChecks()
         guard teamPreset.autoRefreshModelsOnLaunch else {
             return
         }
@@ -266,9 +288,22 @@ final class AppState: ObservableObject {
         }
     }
 
-    func checkForUpdates(silent: Bool = false) async {
+    func checkForUpdates(silent: Bool = false, force: Bool = false) async {
+        if !silent {
+            isCheckingForUpdates = true
+        }
+        defer {
+            if !silent {
+                isCheckingForUpdates = false
+            }
+        }
+
         do {
-            let result = try await updateService.check(currentVersion: currentVersion, settings: updateSettings)
+            var settings = updateSettings
+            if force {
+                settings.checkOnLaunch = true
+            }
+            let result = try await updateService.check(currentVersion: currentVersion, settings: settings)
             switch result {
             case .disabled:
                 if !silent {
@@ -314,6 +349,11 @@ final class AppState: ObservableObject {
     }
 
     private func notifyUpdate(_ manifest: UpdateManifest) {
+        let notificationKey = "lastNotifiedUpdateVersion"
+        if UserDefaults.standard.string(forKey: notificationKey) == manifest.version {
+            return
+        }
+
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }
             let content = UNMutableNotificationContent()
@@ -325,7 +365,40 @@ final class AppState: ObservableObject {
                 content: content,
                 trigger: nil
             )
-            UNUserNotificationCenter.current().add(request)
+            UNUserNotificationCenter.current().add(request) { error in
+                guard error == nil else { return }
+                UserDefaults.standard.set(manifest.version, forKey: notificationKey)
+            }
+        }
+    }
+
+    private func configureLaunchAtLogin() {
+        guard #available(macOS 13.0, *),
+              Bundle.main.bundleURL.path.hasPrefix("/Applications/") else {
+            return
+        }
+        guard SMAppService.mainApp.status == .notRegistered else {
+            return
+        }
+        try? SMAppService.mainApp.register()
+    }
+
+    private func requestUpdateNotificationAuthorization() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    private func startPeriodicUpdateChecks() {
+        guard updateMonitorTask == nil else {
+            return
+        }
+        updateMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 6 * 60 * 60 * 1_000_000_000)
+                guard !Task.isCancelled, let self else {
+                    return
+                }
+                await self.checkForUpdates(silent: true, force: true)
+            }
         }
     }
 

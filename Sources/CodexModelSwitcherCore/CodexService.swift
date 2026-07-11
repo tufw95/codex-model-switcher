@@ -324,6 +324,11 @@ public final class CodexService {
             }
         }
 
+        if let combo = allModels.first(where: { $0.notes == "9Router Combo" }),
+           combo.upstreamModel != selectedModel.upstreamModel {
+            arguments.append(contentsOf: ["--fallback-to", combo.upstreamModel])
+        }
+
         arguments.append(contentsOf: [
             "--rewrite-openai-models",
             "--model-catalog",
@@ -473,37 +478,45 @@ public final class CodexService {
             _ = try? Shell.run(codexCLI.path, ["remote-control", "start"], requireSuccess: false)
         }
 
+        reopenCodexApp(previouslyRunning: previouslyRunning)
+        waitForCodexAppToLaunch(timeout: 6.0)
+
         if openNewThread {
             _ = try? Shell.run("/usr/bin/open", ["codex://threads/new"], requireSuccess: false)
-            Thread.sleep(forTimeInterval: 1.0)
-            if !isAnyCodexAppRunning() {
-                reopenCodexApp(previouslyRunning: previouslyRunning)
-                Thread.sleep(forTimeInterval: 0.8)
-                _ = try? Shell.run("/usr/bin/open", ["codex://threads/new"], requireSuccess: false)
-            }
-        } else {
-            reopenCodexApp(previouslyRunning: previouslyRunning)
         }
     }
 
     private struct ManagedCodexApp {
         var processName: String
         var applicationName: String
+        var bundleIdentifier: String?
+        var applicationPath: String?
     }
 
     private var managedCodexApps: [ManagedCodexApp] {
         [
-            ManagedCodexApp(processName: "ChatGPT", applicationName: "ChatGPT"),
-            ManagedCodexApp(processName: "Codex", applicationName: "Codex")
+            ManagedCodexApp(
+                processName: "ChatGPT",
+                applicationName: "ChatGPT",
+                bundleIdentifier: "com.openai.codex",
+                applicationPath: "/Applications/ChatGPT.app"
+            ),
+            ManagedCodexApp(
+                processName: "Codex",
+                applicationName: "Codex",
+                bundleIdentifier: nil,
+                applicationPath: "/Applications/Codex.app"
+            )
         ]
     }
 
     private func quitCodexApps() -> [ManagedCodexApp] {
         let running = runningCodexApps()
         for app in running {
+            let target = app.bundleIdentifier.map { "id \"\($0)\"" } ?? "\"\(app.applicationName)\""
             _ = try? Shell.run(
                 "/usr/bin/osascript",
-                ["-e", "tell application \"\(app.applicationName)\" to quit"],
+                ["-e", "tell application \(target) to quit"],
                 requireSuccess: false
             )
         }
@@ -517,11 +530,24 @@ public final class CodexService {
     }
 
     private func reopenCodexApp(previouslyRunning: [ManagedCodexApp]) {
-        let preferred = previouslyRunning.first ?? managedCodexApps.first
-        guard let preferred else {
-            return
+        var candidates = previouslyRunning + managedCodexApps
+        var seen = Set<String>()
+        candidates = candidates.filter { seen.insert($0.processName).inserted }
+
+        for app in candidates {
+            if let path = app.applicationPath,
+               FileManager.default.fileExists(atPath: path),
+               (try? Shell.run("/usr/bin/open", [path], requireSuccess: false).succeeded) == true {
+                return
+            }
+            if let bundleIdentifier = app.bundleIdentifier,
+               (try? Shell.run("/usr/bin/open", ["-b", bundleIdentifier], requireSuccess: false).succeeded) == true {
+                return
+            }
+            if (try? Shell.run("/usr/bin/open", ["-a", app.applicationName], requireSuccess: false).succeeded) == true {
+                return
+            }
         }
-        _ = try? Shell.run("/usr/bin/open", ["-a", preferred.applicationName], requireSuccess: false)
     }
 
     private func runningCodexApps() -> [ManagedCodexApp] {
@@ -541,6 +567,16 @@ public final class CodexService {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if !isAnyCodexAppRunning() {
+                return
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+    }
+
+    private func waitForCodexAppToLaunch(timeout: TimeInterval) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if isAnyCodexAppRunning() {
                 return
             }
             Thread.sleep(forTimeInterval: 0.2)

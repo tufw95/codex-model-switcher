@@ -11,6 +11,7 @@ public struct SwiftRouterProxyConfiguration: Sendable {
     public var rewriteOpenAIModels: Bool
     public var rewriteAllUnmapped: Bool
     public var modelCatalog: URL?
+    public var fallbackModel: String?
 
     public init(
         host: String = "127.0.0.1",
@@ -21,7 +22,8 @@ public struct SwiftRouterProxyConfiguration: Sendable {
         rewriteTo: String,
         rewriteOpenAIModels: Bool = true,
         rewriteAllUnmapped: Bool = true,
-        modelCatalog: URL? = nil
+        modelCatalog: URL? = nil,
+        fallbackModel: String? = nil
     ) {
         self.host = host
         self.port = port
@@ -32,6 +34,7 @@ public struct SwiftRouterProxyConfiguration: Sendable {
         self.rewriteOpenAIModels = rewriteOpenAIModels
         self.rewriteAllUnmapped = rewriteAllUnmapped
         self.modelCatalog = modelCatalog
+        self.fallbackModel = fallbackModel
     }
 }
 
@@ -133,7 +136,33 @@ public final class SwiftRouterProxy: @unchecked Sendable {
     }
 
     private func forward(_ request: HTTPRequest) async throws -> Data {
-        let outgoingBody = maybeRewriteBody(request.body, headers: request.headers)
+        let primaryBody = maybeRewriteBody(request.body, headers: request.headers)
+        var result = try await performUpstreamRequest(request, body: primaryBody)
+
+        if isTransientStatus(result.status) {
+            log("upstream returned \(result.status); retrying selected model")
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            result = try await performUpstreamRequest(request, body: primaryBody)
+        }
+
+        if isTransientStatus(result.status),
+           let fallbackModel = configuration.fallbackModel,
+           let fallbackBody = bodyBySettingModel(request.body, headers: request.headers, model: fallbackModel),
+           fallbackBody != primaryBody {
+            log("upstream still returned \(result.status); falling back to \(fallbackModel)")
+            result = try await performUpstreamRequest(request, body: fallbackBody)
+        }
+
+        var body = result.body
+        let normalizeTitle = isSingleTitleSchemaRequest(request.body, headers: request.headers)
+        if normalizeTitle, result.contentType.lowercased().contains("text/event-stream") {
+            body = normalizeTitleSSE(body)
+        }
+
+        return HTTPResponse(status: result.status, headers: result.headers, body: body).serialized()
+    }
+
+    private func performUpstreamRequest(_ request: HTTPRequest, body outgoingBody: Data) async throws -> UpstreamResult {
         var urlRequest = URLRequest(url: upstreamURL(for: request.path))
         urlRequest.httpMethod = request.method
         urlRequest.httpBody = outgoingBody.isEmpty ? nil : outgoingBody
@@ -154,18 +183,12 @@ public final class SwiftRouterProxy: @unchecked Sendable {
             urlRequest.setValue(String(outgoingBody.count), forHTTPHeaderField: "Content-Length")
         }
 
-        let normalizeTitle = isSingleTitleSchemaRequest(request.body, headers: request.headers)
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
 
-        var body = data
         let contentType = http.value(forHTTPHeaderField: "Content-Type") ?? ""
-        if normalizeTitle, contentType.lowercased().contains("text/event-stream") {
-            body = normalizeTitleSSE(data)
-        }
-
         var headers: [String: String] = [:]
         for (key, value) in http.allHeaderFields {
             guard let key = key as? String else { continue }
@@ -175,7 +198,12 @@ public final class SwiftRouterProxy: @unchecked Sendable {
             }
             headers[key] = "\(value)"
         }
-        return HTTPResponse(status: http.statusCode, headers: headers, body: body).serialized()
+        return UpstreamResult(
+            status: http.statusCode,
+            headers: headers,
+            body: data,
+            contentType: contentType
+        )
     }
 
     private func upstreamURL(for path: String) -> URL {
@@ -221,6 +249,16 @@ public final class SwiftRouterProxy: @unchecked Sendable {
         return rewritten
     }
 
+    private func bodyBySettingModel(_ body: Data, headers: [String: String], model: String) -> Data? {
+        guard !body.isEmpty, contentType(headers).contains("json"),
+              let object = try? JSONSerialization.jsonObject(with: body),
+              var payload = object as? [String: Any] else {
+            return nil
+        }
+        payload["model"] = model
+        return try? JSONSerialization.data(withJSONObject: payload, options: [])
+    }
+
     private func rewrittenModel(_ model: String) -> String? {
         if let mapped = configuration.rewriteMap[model] {
             return mapped
@@ -242,6 +280,14 @@ public final class SwiftRouterProxy: @unchecked Sendable {
 
     private func contentType(_ headers: [String: String]) -> String {
         headers.first { $0.key.caseInsensitiveCompare("Content-Type") == .orderedSame }?.value.lowercased() ?? ""
+    }
+
+    private func isTransientStatus(_ status: Int) -> Bool {
+        status == 502 || status == 503 || status == 504
+    }
+
+    private func log(_ message: String) {
+        FileHandle.standardError.write(Data("[Codex Switch] \(message)\n".utf8))
     }
 
     private func isSingleTitleSchemaRequest(_ body: Data, headers: [String: String]) -> Bool {
@@ -353,6 +399,7 @@ public final class SwiftRouterProxy: @unchecked Sendable {
         var rewriteOpenAIModels = false
         var rewriteAllUnmapped = true
         var modelCatalog: URL?
+        var fallbackModel: String?
 
         var index = 0
         while index < arguments.count {
@@ -394,6 +441,8 @@ public final class SwiftRouterProxy: @unchecked Sendable {
                 rewriteAllUnmapped = false
             case "--model-catalog":
                 modelCatalog = URL(fileURLWithPath: try value())
+            case "--fallback-to":
+                fallbackModel = try value()
             default:
                 break
             }
@@ -409,9 +458,17 @@ public final class SwiftRouterProxy: @unchecked Sendable {
             rewriteTo: rewriteTo ?? "cx/codex",
             rewriteOpenAIModels: rewriteOpenAIModels,
             rewriteAllUnmapped: rewriteAllUnmapped,
-            modelCatalog: modelCatalog
+            modelCatalog: modelCatalog,
+            fallbackModel: fallbackModel
         )
     }
+}
+
+private struct UpstreamResult {
+    var status: Int
+    var headers: [String: String]
+    var body: Data
+    var contentType: String
 }
 
 private struct HTTPRequest {

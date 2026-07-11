@@ -34,24 +34,23 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
     public static let defaults: [RouterModel] = [
         RouterModel(
             codexSlug: "gpt-5.5",
-            displayName: "GPT-5.5",
+            displayName: displayName(for: "gpt-5.5"),
             upstreamModel: "cx/gpt-5.5",
             aliases: ["openai/gpt-5.5"],
             priority: defaultPriority(for: "gpt-5.5")
         ),
         RouterModel(
             codexSlug: "gpt-5.4",
-            displayName: "GPT-5.4",
+            displayName: displayName(for: "gpt-5.4"),
             upstreamModel: "cx/gpt-5.4",
             aliases: ["openai/gpt-5.4"],
             priority: defaultPriority(for: "gpt-5.4")
         ),
         RouterModel(
             codexSlug: "gpt-5.4-mini",
-            displayName: "GPT-5.4 Mini",
+            displayName: displayName(for: "gpt-5.4-mini"),
             upstreamModel: "cx/gpt-5.4-mini",
             aliases: ["openai/gpt-5.4-mini"],
-            visible: false,
             priority: defaultPriority(for: "gpt-5.4-mini")
         )
     ]
@@ -65,6 +64,7 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
             displayName: displayName(for: codexSlug),
             upstreamModel: upstream,
             aliases: ["openai/\(codexSlug)"],
+            visible: defaultVisibility(for: codexSlug),
             priority: defaultPriority(for: codexSlug)
         )
     }
@@ -96,7 +96,7 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
         let normalized = normalizeSlug(slug)
         let clean = normalized.hasPrefix("cx/") ? String(normalized.dropFirst(3)) : normalized
         if clean == "codex" {
-            return "Codex (9Router Combo)"
+            return "Codex"
         }
 
         let parts = clean.split(separator: "-").map(String.init)
@@ -106,7 +106,7 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
             let part = parts[index]
             if part == "gpt" {
                 if index + 1 < parts.count, parts[index + 1].contains(".") {
-                    words.append("GPT-\(parts[index + 1])")
+                    words.append(parts[index + 1])
                     index += 2
                     continue
                 }
@@ -117,6 +117,18 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
             index += 1
         }
         return words.joined(separator: " ")
+    }
+
+    public static func defaultVisibility(for slug: String) -> Bool {
+        let normalized = normalizeSlug(slug)
+        let clean = normalized.hasPrefix("cx/") ? String(normalized.dropFirst(3)) : normalized
+        if clean == "codex" || clean.contains("-review") {
+            return false
+        }
+        if clean.hasPrefix("gpt-5.3-codex") {
+            return false
+        }
+        return true
     }
 
     public static func defaultPriority(for slug: String) -> Int {
@@ -134,6 +146,8 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
             variantOffset = 2
         } else if clean.contains("-luna") {
             variantOffset = 4
+        } else if clean.contains("-mini") {
+            variantOffset = 8
         } else {
             variantOffset = 6
         }

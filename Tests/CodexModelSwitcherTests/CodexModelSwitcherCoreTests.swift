@@ -6,21 +6,25 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         let model = RouterModel.inferred(from: "gpt 5.6")
         XCTAssertEqual(model.codexSlug, "gpt-5.6")
         XCTAssertEqual(model.upstreamModel, "cx/gpt-5.6")
-        XCTAssertEqual(model.displayName, "GPT-5.6")
+        XCTAssertEqual(model.displayName, "5.6")
         XCTAssertTrue(model.aliases.contains("openai/gpt-5.6"))
     }
 
-    func testRouterDisplayNamesAndPrioritiesPreferComboAndLatestModels() {
-        XCTAssertEqual(RouterModel.displayName(for: "cx/codex"), "Codex (9Router Combo)")
-        XCTAssertEqual(RouterModel.displayName(for: "gpt-5.6-sol-review"), "GPT-5.6 Sol Review")
+    func testRouterDisplayNamesAndPrioritiesMatchOfficialPicker() {
+        XCTAssertEqual(RouterModel.displayName(for: "cx/codex"), "Codex")
+        XCTAssertEqual(RouterModel.displayName(for: "gpt-5.6-sol"), "5.6 Sol")
+        XCTAssertEqual(RouterModel.displayName(for: "gpt-5.4-mini"), "5.4 Mini")
         XCTAssertLessThan(RouterModel.defaultPriority(for: "codex"), RouterModel.defaultPriority(for: "gpt-5.6-sol"))
         XCTAssertLessThan(RouterModel.defaultPriority(for: "gpt-5.6-sol"), RouterModel.defaultPriority(for: "gpt-5.5"))
+        XCTAssertFalse(RouterModel.defaultVisibility(for: "gpt-5.6-sol-review"))
+        XCTAssertFalse(RouterModel.defaultVisibility(for: "gpt-5.3-codex"))
+        XCTAssertTrue(RouterModel.defaultVisibility(for: "gpt-5.4-mini"))
     }
 
     func testRouterRefreshModelsReplaceStaleLocalPriorities() throws {
         let combo = try XCTUnwrap(ModelRegistryStore.model(fromRouterItem: [
-            "id": "cx/codex",
-            "display_name": "CODEX"
+            "id": "Codex",
+            "owned_by": "combo"
         ]))
         let sol = try XCTUnwrap(ModelRegistryStore.model(fromRouterItem: [
             "id": "cx/gpt-5.6-sol",
@@ -43,8 +47,33 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         )
 
         XCTAssertEqual(merged.map(\.codexSlug), ["codex", "gpt-5.6-sol", "gpt-5.5"])
-        XCTAssertEqual(combo.displayName, "Codex (9Router Combo)")
-        XCTAssertEqual(sol.displayName, "GPT-5.6 Sol")
+        XCTAssertEqual(combo.displayName, "Codex")
+        XCTAssertEqual(combo.upstreamModel, "Codex")
+        XCTAssertFalse(combo.visible)
+        XCTAssertEqual(combo.notes, "9Router Combo")
+        XCTAssertEqual(sol.displayName, "5.6 Sol")
+    }
+
+    func testVisibleRouterModelsMatchOfficialPickerOrder() {
+        let items: [[String: Any]] = [
+            ["id": "Codex", "owned_by": "combo"],
+            ["id": "cx/gpt-5.6-luna-review", "owned_by": "cx"],
+            ["id": "cx/gpt-5.4-mini", "owned_by": "cx"],
+            ["id": "cx/gpt-5.5", "owned_by": "cx"],
+            ["id": "cx/gpt-5.6-terra", "owned_by": "cx"],
+            ["id": "cx/gpt-5.3-codex", "owned_by": "cx"],
+            ["id": "cx/gpt-5.6-sol", "owned_by": "cx"],
+            ["id": "cx/gpt-5.4", "owned_by": "cx"],
+            ["id": "cx/gpt-5.6-luna", "owned_by": "cx"]
+        ]
+
+        let visibleNames = items
+            .compactMap(ModelRegistryStore.model(fromRouterItem:))
+            .filter(\.visible)
+            .sorted { $0.priority < $1.priority }
+            .map(\.displayName)
+
+        XCTAssertEqual(visibleNames, ["5.6 Sol", "5.6 Terra", "5.6 Luna", "5.5", "5.4", "5.4 Mini"])
     }
 
     func testConfigRewritePreservesUnrelatedSections() {
@@ -118,7 +147,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let catalogModels = json?["models"] as? [[String: Any]]
         XCTAssertEqual(catalogModels?.first?["slug"] as? String, "gpt-5.6")
-        XCTAssertEqual(catalogModels?.first?["display_name"] as? String, "GPT-5.6")
+        XCTAssertEqual(catalogModels?.first?["display_name"] as? String, "5.6")
         XCTAssertEqual(catalogModels?.first?["visibility"] as? String, "list")
     }
 }

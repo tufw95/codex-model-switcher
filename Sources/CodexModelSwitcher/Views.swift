@@ -115,7 +115,7 @@ struct CompactSwitchView: View {
 
             Divider()
 
-            HStack {
+            HStack(spacing: 8) {
                 Text(app.status.apiKeyAvailable ? "API key saved locally" : "API key required for 9Router")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -128,11 +128,62 @@ struct CompactSwitchView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                 }
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
+            }
+
+            if let update = app.updateManifest {
+                Button {
+                    app.openUpdateDownload()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "arrow.down.circle.fill")
+                        Text("Update to v\(update.version)")
+                            .font(.system(size: 12, weight: .semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .background(Color.accentColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 10) {
+                Text(app.versionLabel)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+
+                Button {
+                    Task {
+                        await app.checkForUpdates(force: true)
+                    }
+                } label: {
+                    if app.isCheckingForUpdates {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .frame(width: 82)
+                    } else {
+                        Label("Check Update", systemImage: "arrow.clockwise")
+                            .font(.caption)
+                    }
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                .disabled(app.isCheckingForUpdates)
+
+                Button {
+                    NSApplication.shared.terminate(nil)
+                } label: {
+                    Image(systemName: "power")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Quit Codex Switch")
             }
         }
         .padding(14)

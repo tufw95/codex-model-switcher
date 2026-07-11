@@ -6,7 +6,7 @@ public struct UpdateSettings: Codable, Equatable, Sendable {
 
     public init(
         checkOnLaunch: Bool = true,
-        manifestURL: String = "https://raw.githubusercontent.com/bigroll/codex-model-switcher/main/update.json"
+        manifestURL: String = "https://github.com/tufw95/codex-model-switcher/releases/latest/download/update.json"
     ) {
         self.checkOnLaunch = checkOnLaunch
         self.manifestURL = manifestURL

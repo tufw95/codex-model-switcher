@@ -105,16 +105,21 @@ public final class ModelRegistryStore {
             return nil
         }
 
+        let cleanRawID = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isCombo = (item["owned_by"] as? String)?.caseInsensitiveCompare("combo") == .orderedSame
         let normalized = RouterModel.normalizeSlug(rawID)
-        let upstream = normalized.hasPrefix("cx/") ? normalized : "cx/\(normalized)"
-        let codexSlug = upstream.hasPrefix("cx/") ? String(upstream.dropFirst(3)) : upstream
+        let upstream = isCombo
+            ? cleanRawID
+            : (normalized.hasPrefix("cx/") ? normalized : "cx/\(normalized)")
+        let codexSlug = normalized.hasPrefix("cx/") ? String(normalized.dropFirst(3)) : normalized
         return RouterModel(
             codexSlug: codexSlug,
-            displayName: displayName(fromRouterItem: item, codexSlug: codexSlug),
+            displayName: isCombo ? cleanRawID : RouterModel.displayName(for: codexSlug),
             upstreamModel: upstream,
             aliases: ["openai/\(codexSlug)"],
-            visible: true,
-            priority: item["priority"] as? Int ?? RouterModel.defaultPriority(for: codexSlug)
+            visible: !isCombo && RouterModel.defaultVisibility(for: codexSlug),
+            priority: item["priority"] as? Int ?? RouterModel.defaultPriority(for: codexSlug),
+            notes: isCombo ? "9Router Combo" : nil
         )
     }
 
@@ -142,7 +147,8 @@ public final class ModelRegistryStore {
                 existing.upstreamModel = routerModel.upstreamModel
                 existing.aliases = routerModel.aliases
                 existing.priority = routerModel.priority
-                existing.visible = true
+                existing.visible = routerModel.visible
+                existing.notes = routerModel.notes
                 merged[routerModel.codexSlug] = existing
             } else {
                 merged[routerModel.codexSlug] = routerModel
@@ -156,21 +162,4 @@ public final class ModelRegistryStore {
         }
     }
 
-    private static func displayName(fromRouterItem item: [String: Any], codexSlug: String) -> String {
-        if codexSlug == "codex" {
-            return RouterModel.displayName(for: codexSlug)
-        }
-
-        let rawName = ((item["display_name"] as? String) ?? (item["name"] as? String) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !rawName.isEmpty else {
-            return RouterModel.displayName(for: codexSlug)
-        }
-
-        let normalizedRawName = RouterModel.normalizeSlug(rawName)
-        if normalizedRawName == codexSlug || rawName == rawName.uppercased() {
-            return RouterModel.displayName(for: codexSlug)
-        }
-        return rawName
-    }
 }
