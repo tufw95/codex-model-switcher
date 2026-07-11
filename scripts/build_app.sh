@@ -78,6 +78,11 @@ if [[ -f "$ROOT_DIR/Assets/AppIcon.icns" ]]; then
   cp "$ROOT_DIR/Assets/AppIcon.icns" "$STAGE_APP_DIR/Contents/Resources/AppIcon.icns"
 fi
 
+if [[ -f "$ROOT_DIR/Assets/MenuBarIcon.png" ]]; then
+  clean_bundle_xattrs "$ROOT_DIR/Assets/MenuBarIcon.png"
+  cp "$ROOT_DIR/Assets/MenuBarIcon.png" "$STAGE_APP_DIR/Contents/Resources/MenuBarIcon.png"
+fi
+
 cat > "$STAGE_APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -13,12 +13,11 @@ struct CompactSwitchView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                Image(systemName: usingNineRouter ? "point.3.connected.trianglepath.dotted" : "switch.2")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(usingNineRouter ? .green : .blue)
+                Image(nsImage: BrandAssets.appIcon)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
                     .frame(width: 26, height: 26)
-                    .background((usingNineRouter ? Color.green : Color.blue).opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Codex Switch")
@@ -254,18 +253,11 @@ struct HeaderView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: "switch.2")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(.white)
+            Image(nsImage: BrandAssets.appIcon)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
                 .frame(width: 52, height: 52)
-                .background(
-                    LinearGradient(
-                        colors: [Color(red: 0.05, green: 0.45, blue: 0.58), Color(red: 0.10, green: 0.58, blue: 0.40)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Codex Model Switcher")

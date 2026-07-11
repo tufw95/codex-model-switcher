@@ -23,7 +23,8 @@ struct CodexModelSwitcherApp: App {
                 .environmentObject(appState)
                 .frame(width: 286)
         } label: {
-            Image(systemName: appState.status.activeProvider == "NineRouter" ? "point.3.connected.trianglepath.dotted" : "switch.2")
+            Image(nsImage: BrandAssets.menuBarIcon)
+                .renderingMode(.template)
         }
         .menuBarExtraStyle(.window)
     }
