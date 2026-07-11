@@ -20,6 +20,8 @@ public struct UpdateManifest: Codable, Equatable, Sendable {
     public var releaseNotesURL: String?
     public var minimumMacOS: String?
     public var message: String?
+    public var sha256: String?
+    public var sizeBytes: Int64?
 
     enum CodingKeys: String, CodingKey {
         case version
@@ -28,6 +30,8 @@ public struct UpdateManifest: Codable, Equatable, Sendable {
         case releaseNotesURL = "release_notes_url"
         case minimumMacOS = "minimum_macos"
         case message
+        case sha256
+        case sizeBytes = "size_bytes"
     }
 }
 

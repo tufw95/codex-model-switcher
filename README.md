@@ -86,10 +86,14 @@ VERSION=1.0.0 \
 ./scripts/notarize.sh
 ```
 
-## Update Notifications
+## One-click OTA Updates
 
 The app reads a JSON manifest. The default URL can be changed in the Updates section.
 For a public release, set the default URL at build time with `UPDATE_MANIFEST_URL`.
+When a newer version is available, the app downloads the DMG, verifies its size,
+SHA-256 checksum, bundle identifier, version, build, and code signature, then replaces
+the installed app and relaunches it. macOS only asks for an administrator password when
+the installation directory is not writable by the current user.
 
 Example:
 
@@ -100,7 +104,9 @@ Example:
   "download_url": "https://example.com/Codex-Model-Switcher-1.0.1.dmg",
   "release_notes_url": "https://example.com/codex-model-switcher/releases/1.0.1",
   "minimum_macos": "13.0",
-  "message": "Improved model discovery and proxy stability."
+  "message": "Improved model discovery and proxy stability.",
+  "sha256": "DMG_SHA256_HERE",
+  "size_bytes": 1234567
 }
 ```
 
@@ -114,7 +120,7 @@ RELEASE_NOTES_URL="https://example.com/codex-model-switcher/releases/1.0.1" \
 ./scripts/make_update_manifest.sh
 ```
 
-Upload `dist/update.json` to the manifest URL. Every installed app that has update checks enabled will notify the user when `version` is greater than the installed version.
+Upload `dist/update.json` to the manifest URL. Every installed app that has update checks enabled will notify the user when `version` is greater than the installed version and offer one-click installation.
 
 ## Files Written On User Machines
 
@@ -123,6 +129,7 @@ Upload `dist/update.json` to the manifest URL. Every installed app that has upda
 - `~/.codex/config.toml.before-model-switcher`
 - `~/.codex/9router-model-catalog.json`
 - `~/Library/Application Support/Codex Model Switcher/models.json`
+- `~/Library/Application Support/Codex Model Switcher/Updates/`
 - `~/Library/Application Support/Codex Model Switcher/updates.json`
 - `~/Library/LaunchAgents/com.bigroll.codex-model-switcher.proxy.plist`
 

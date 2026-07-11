@@ -37,6 +37,10 @@ public struct AppPaths: Sendable {
         appSupport.appendingPathComponent("updates.json")
     }
 
+    public var updatesDirectory: URL {
+        appSupport.appendingPathComponent("Updates", isDirectory: true)
+    }
+
     public var generatedModelCatalog: URL {
         codexHome.appendingPathComponent("9router-model-catalog.json")
     }

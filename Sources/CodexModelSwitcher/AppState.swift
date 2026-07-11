@@ -20,6 +20,7 @@ final class AppState: ObservableObject {
     @Published var newModelName = ""
     @Published var isBusy = false
     @Published var isCheckingForUpdates = false
+    @Published var isInstallingUpdate = false
     @Published var statusMessage = "Ready"
     @Published var errorMessage: String?
     @Published var updateSettings: UpdateSettings
@@ -30,6 +31,7 @@ final class AppState: ObservableObject {
     private let registry: ModelRegistryStore
     private var codexService: CodexService
     private let updateService: UpdateService
+    private let updateInstaller: UpdateInstaller
     private let teamPreset: TeamPreset
     private var didBootstrap = false
     private var updateMonitorTask: Task<Void, Never>?
@@ -37,11 +39,13 @@ final class AppState: ObservableObject {
     init(
         registry: ModelRegistryStore = ModelRegistryStore(),
         codexService: CodexService = CodexService(),
-        updateService: UpdateService = UpdateService()
+        updateService: UpdateService = UpdateService(),
+        updateInstaller: UpdateInstaller = UpdateInstaller()
     ) {
         self.registry = registry
         self.codexService = codexService
         self.updateService = updateService
+        self.updateInstaller = updateInstaller
         self.teamPreset = TeamPreset.load()
         var loadedUpdateSettings = updateService.loadSettings()
         if let bundledURL = teamPreset.updateManifestURL,
@@ -326,11 +330,38 @@ final class AppState: ObservableObject {
         }
     }
 
-    func openUpdateDownload() {
-        guard let urlString = updateManifest?.downloadURL, let url = URL(string: urlString) else {
+    func installAvailableUpdate() {
+        guard let manifest = updateManifest, !isInstallingUpdate else {
             return
         }
-        NSWorkspace.shared.open(url)
+        Task {
+            isInstallingUpdate = true
+            isBusy = true
+            errorMessage = nil
+            statusMessage = "Downloading update \(manifest.version)"
+
+            do {
+                let plan = try await updateInstaller.prepareInstallation(
+                    manifest: manifest,
+                    currentAppURL: Bundle.main.bundleURL,
+                    expectedBundleIdentifier: Bundle.main.bundleIdentifier ?? "vn.bigroll.codex-model-switcher"
+                )
+                statusMessage = plan.requiresAdministratorPrivileges
+                    ? "Waiting for macOS permission"
+                    : "Installing and restarting"
+                try updateInstaller.launchInstallation(
+                    plan,
+                    currentProcessID: ProcessInfo.processInfo.processIdentifier
+                )
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                NSApplication.shared.terminate(nil)
+            } catch {
+                errorMessage = error.localizedDescription
+                statusMessage = "Update failed"
+                isInstallingUpdate = false
+                isBusy = false
+            }
+        }
     }
 
     private func run(_ message: String, operation: () throws -> String) {
@@ -361,7 +392,7 @@ final class AppState: ObservableObject {
             }
             let content = UNMutableNotificationContent()
             content.title = "Codex Model Switcher \(manifest.version)"
-            content.body = manifest.message ?? "A new version is ready to download."
+            content.body = manifest.message ?? "A new version is ready to install."
             content.sound = .default
             let request = UNNotificationRequest(
                 identifier: "codex-model-switcher-update-\(manifest.version)",

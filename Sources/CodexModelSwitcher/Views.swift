@@ -131,15 +131,23 @@ struct CompactSwitchView: View {
 
             if let update = app.updateManifest {
                 Button {
-                    app.openUpdateDownload()
+                    app.installAvailableUpdate()
                 } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: "arrow.down.circle.fill")
-                        Text("Update to v\(update.version)")
+                        if app.isInstallingUpdate {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                        }
+                        Text(app.isInstallingUpdate ? "Installing v\(update.version)" : "Install v\(update.version)")
                             .font(.system(size: 12, weight: .semibold))
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
+                        if !app.isInstallingUpdate {
+                            Image(systemName: "arrow.up.forward.app")
+                                .font(.caption2)
+                        }
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
@@ -148,6 +156,7 @@ struct CompactSwitchView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .buttonStyle(.plain)
+                .disabled(app.isInstallingUpdate)
             }
 
             HStack(spacing: 10) {
@@ -648,16 +657,22 @@ struct UpdateBanner: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Version \(manifest.version) is available")
                         .font(.headline)
-                    Text(manifest.message ?? "Download the latest build when you are ready.")
+                    Text(manifest.message ?? "Install the latest build when you are ready.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button {
-                    app.openUpdateDownload()
+                    app.installAvailableUpdate()
                 } label: {
-                    Label("Download", systemImage: "arrow.down")
+                    if app.isInstallingUpdate {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label("Install Update", systemImage: "arrow.triangle.2.circlepath")
+                    }
                 }
+                .disabled(app.isInstallingUpdate)
             }
             .padding(12)
             .background(Color.teal.opacity(0.12))
@@ -707,6 +722,12 @@ struct MenuContentView: View {
         }
         Button("Check for Updates") {
             Task { await app.checkForUpdates() }
+        }
+        if let update = app.updateManifest {
+            Button("Install Update v\(update.version)") {
+                app.installAvailableUpdate()
+            }
+            .disabled(app.isInstallingUpdate)
         }
         Divider()
         Button("Quit") {

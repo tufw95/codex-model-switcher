@@ -181,6 +181,85 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertGreaterThan(result.stderr.utf8.count, 65_536)
     }
 
+    func testUpdateManifestDecodesInstallationIntegrityFields() throws {
+        let data = Data(
+            """
+            {
+              "version": "1.2.3",
+              "build": "42",
+              "download_url": "https://example.com/update.dmg",
+              "sha256": "abcdef",
+              "size_bytes": 123456
+            }
+            """.utf8
+        )
+
+        let manifest = try JSONDecoder().decode(UpdateManifest.self, from: data)
+        XCTAssertEqual(manifest.sha256, "abcdef")
+        XCTAssertEqual(manifest.sizeBytes, 123456)
+    }
+
+    func testUpdateInstallerComputesSHA256() throws {
+        let fileURL = try temporaryFile(named: "checksum.txt", contents: "Codex Switch OTA")
+        XCTAssertEqual(
+            try UpdateInstaller.sha256(of: fileURL),
+            "6f63fc6c9dcf86a5d644f56651973752bd881b4ef0e33a4a893f778e8ff699c0"
+        )
+    }
+
+    func testUpdateInstallerReplacesSignedAppBundle() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodexModelSwitcherUpdateTests-\(UUID().uuidString)", isDirectory: true)
+        let targetURL = root.appendingPathComponent("Installed/Codex Model Switcher.app", isDirectory: true)
+        let stagedURL = root.appendingPathComponent("Working/staged/Codex Model Switcher.app", isDirectory: true)
+        let workingURL = root.appendingPathComponent("Working", isDirectory: true)
+        let scriptURL = workingURL.appendingPathComponent("install-update.sh")
+        let logURL = root.appendingPathComponent("updater.log")
+        try makeSignedTestApp(at: targetURL, marker: "old")
+        try makeSignedTestApp(at: stagedURL, marker: "new")
+        try UpdateInstaller.installerScript.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let plan = UpdateInstallationPlan(
+            targetAppURL: targetURL,
+            stagedAppURL: stagedURL,
+            currentAppURL: targetURL,
+            workingDirectory: workingURL,
+            installerScriptURL: scriptURL,
+            logURL: logURL,
+            requiresAdministratorPrivileges: false
+        )
+        try UpdateInstaller().launchInstallation(
+            plan,
+            currentProcessID: Int32.max,
+            relaunch: false
+        )
+
+        let markerURL = targetURL.appendingPathComponent("Contents/Resources/marker.txt")
+        let deadline = Date().addingTimeInterval(5)
+        var marker = ""
+        while Date() < deadline {
+            marker = (try? String(contentsOf: markerURL, encoding: .utf8)) ?? ""
+            if marker == "new" {
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        XCTAssertEqual(marker, "new")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: workingURL.path))
+        XCTAssertTrue(
+            try Shell.run(
+                "/usr/bin/codesign",
+                ["--verify", "--deep", "--strict", targetURL.path],
+                requireSuccess: false
+            ).succeeded
+        )
+    }
+
     func testCatalogBuilderPrefersFreshBundledMetadataOverExistingCatalog() throws {
         let existingCatalogURL = try temporaryFile(
             named: "existing-catalog.json",
@@ -300,5 +379,30 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         let url = try temporaryFile(named: name, contents: script)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
         return url
+    }
+
+    private func makeSignedTestApp(at appURL: URL, marker: String) throws {
+        let contentsURL = appURL.appendingPathComponent("Contents", isDirectory: true)
+        let macOSURL = contentsURL.appendingPathComponent("MacOS", isDirectory: true)
+        let resourcesURL = contentsURL.appendingPathComponent("Resources", isDirectory: true)
+        try FileManager.default.createDirectory(at: macOSURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
+
+        let executableURL = macOSURL.appendingPathComponent("TestApp")
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executableURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
+        try Data(marker.utf8).write(to: resourcesURL.appendingPathComponent("marker.txt"))
+
+        let info: [String: Any] = [
+            "CFBundleExecutable": "TestApp",
+            "CFBundleIdentifier": "vn.bigroll.codex-model-switcher.test",
+            "CFBundleName": "Codex Model Switcher Test",
+            "CFBundlePackageType": "APPL",
+            "CFBundleShortVersionString": "1.0.0",
+            "CFBundleVersion": "1"
+        ]
+        let plist = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        try plist.write(to: contentsURL.appendingPathComponent("Info.plist"))
+        try Shell.run("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", appURL.path])
     }
 }
