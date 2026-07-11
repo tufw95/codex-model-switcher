@@ -95,7 +95,11 @@ public final class CodexService {
             codexCLI: codexCLI
         )
         try startProxy(selectedModel: selectedModel, allModels: allModels)
-        try rewriteConfig(profile: .nineRouter, model: selectedModel)
+        try rewriteConfig(
+            profile: .nineRouter,
+            model: selectedModel,
+            useChatGPTAuthentication: isChatGPTLoggedIn(codexCLI: codexCLI)
+        )
         try repairNodeReplConfigIfPossible(codexCLI: codexCLI)
         try restartCodex(openNewThread: openNewThread, codexCLI: codexCLI)
     }
@@ -147,6 +151,20 @@ public final class CodexService {
                 title: "Codex CLI",
                 message: "Codex CLI is available.",
                 status: .passed
+            ))
+        }
+
+        if isChatGPTLoggedIn(codexCLI: detectCodexCLI()) {
+            checks.append(PreflightCheck(
+                title: "ChatGPT features",
+                message: "ChatGPT sign-in is available for Scheduled, Plugins, Sites, and Chat.",
+                status: .passed
+            ))
+        } else {
+            checks.append(PreflightCheck(
+                title: "ChatGPT features",
+                message: "9Router will work, but ChatGPT cloud menu items require a ChatGPT sign-in.",
+                status: .warning
             ))
         }
 
@@ -314,7 +332,9 @@ public final class CodexService {
             "--port",
             "\(proxyPort)",
             "--target",
-            routerTargetURL.absoluteString
+            routerTargetURL.absoluteString,
+            "--api-key-file",
+            paths.codexEnvFile.path
         ]
 
         for model in allModels {
@@ -363,7 +383,11 @@ public final class CodexService {
         return nil
     }
 
-    private func rewriteConfig(profile: CodexProfile, model: RouterModel) throws {
+    private func rewriteConfig(
+        profile: CodexProfile,
+        model: RouterModel,
+        useChatGPTAuthentication: Bool = true
+    ) throws {
         let configURL = paths.defaultCodexConfig
         try FileManager.default.createDirectory(at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
@@ -379,7 +403,8 @@ public final class CodexService {
             model: model,
             catalogPath: paths.generatedModelCatalog.path,
             proxyBaseURL: proxyBaseURL,
-            reasoningEffort: model.reasoningEffort
+            reasoningEffort: model.reasoningEffort,
+            useChatGPTAuthentication: useChatGPTAuthentication
         )
         try rewritten.write(to: configURL, atomically: true, encoding: .utf8)
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
@@ -585,6 +610,16 @@ public final class CodexService {
 
     private func launchDomain() -> String {
         "gui/\(getuid())"
+    }
+
+    private func isChatGPTLoggedIn(codexCLI: URL?) -> Bool {
+        guard let codexCLI,
+              let result = try? Shell.run(codexCLI.path, ["login", "status"], requireSuccess: false),
+              result.succeeded else {
+            return false
+        }
+        return result.stdout.localizedCaseInsensitiveContains("Logged in using ChatGPT")
+            || result.stderr.localizedCaseInsensitiveContains("Logged in using ChatGPT")
     }
 
     private func normalizedAPIKey(_ value: String) -> String {

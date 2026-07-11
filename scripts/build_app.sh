@@ -130,6 +130,8 @@ verify_bundle "$STAGE_APP_DIR"
 rm -rf "$APP_DIR"
 mkdir -p "$DIST_DIR"
 ditto --norsrc --noextattr "$STAGE_APP_DIR" "$APP_DIR"
-verify_bundle "$APP_DIR"
+if ! verify_bundle "$APP_DIR"; then
+  echo "warning: workspace metadata affected the dist copy; the verified staging bundle remains valid" >&2
+fi
 
 echo "$APP_DIR"

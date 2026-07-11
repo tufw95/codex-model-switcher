@@ -110,9 +110,54 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
 
         XCTAssertTrue(rewritten.contains("model_provider = \"NineRouter\""))
         XCTAssertTrue(rewritten.contains("model = \"gpt-5.6\""))
+        XCTAssertTrue(rewritten.contains("requires_openai_auth = true"))
+        XCTAssertFalse(rewritten.contains("env_key = \"NINEROUTER_API_KEY\""))
         XCTAssertTrue(rewritten.contains("approval_policy = \"never\""))
         XCTAssertTrue(rewritten.contains("[projects.\"/tmp\"]"))
         XCTAssertEqual(rewritten.components(separatedBy: "[model_providers.NineRouter]").count, 2)
+    }
+
+    func testNineRouterConfigFallsBackToAPIKeyAuthWithoutChatGPTLogin() {
+        let rewritten = CodexConfigRewriter.rewriteModelConfig(
+            existing: "",
+            profile: .nineRouter,
+            model: RouterModel.inferred(from: "gpt-5.6-sol"),
+            catalogPath: "/Users/example/.codex/9router-model-catalog.json",
+            proxyBaseURL: "http://127.0.0.1:9783/v1",
+            useChatGPTAuthentication: false
+        )
+
+        XCTAssertTrue(rewritten.contains("env_key = \"NINEROUTER_API_KEY\""))
+        XCTAssertFalse(rewritten.contains("requires_openai_auth"))
+    }
+
+    func testProxyReplacesOpenAIAuthenticationWithLocalRouterKey() {
+        let headers = SwiftRouterProxy.upstreamHeaders(
+            from: [
+                "Authorization": "Bearer openai-account-token",
+                "ChatGPT-Account-ID": "account-123",
+                "X-OpenAI-Attestation": "private-attestation",
+                "Cookie": "private-cookie",
+                "Content-Type": "application/json",
+                "Accept-Encoding": "gzip"
+            ],
+            routerAPIKey: "router-secret"
+        )
+
+        XCTAssertEqual(headers["Authorization"], "Bearer router-secret")
+        XCTAssertEqual(headers["Content-Type"], "application/json")
+        XCTAssertEqual(headers["Accept-Encoding"], "identity")
+        XCTAssertFalse(headers.keys.contains { $0.caseInsensitiveCompare("ChatGPT-Account-ID") == .orderedSame })
+        XCTAssertFalse(headers.keys.contains { $0.caseInsensitiveCompare("X-OpenAI-Attestation") == .orderedSame })
+        XCTAssertFalse(headers.keys.contains { $0.caseInsensitiveCompare("Cookie") == .orderedSame })
+    }
+
+    func testProxyReadsRouterKeyFromLocalEnvFile() throws {
+        let envURL = try temporaryFile(
+            named: ".env",
+            contents: "NINEROUTER_API_KEY=\"router-secret\" # local only\n"
+        )
+        XCTAssertEqual(SwiftRouterProxy.readAPIKey(from: envURL), "router-secret")
     }
 
     func testAuthenticConfigRemovesNineRouterProvider() {
@@ -243,7 +288,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         var marker = ""
         while Date() < deadline {
             marker = (try? String(contentsOf: markerURL, encoding: .utf8)) ?? ""
-            if marker == "new" {
+            if marker == "new", !FileManager.default.fileExists(atPath: workingURL.path) {
                 break
             }
             Thread.sleep(forTimeInterval: 0.05)

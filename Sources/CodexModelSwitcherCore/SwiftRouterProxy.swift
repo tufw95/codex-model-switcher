@@ -12,6 +12,7 @@ public struct SwiftRouterProxyConfiguration: Sendable {
     public var rewriteAllUnmapped: Bool
     public var modelCatalog: URL?
     public var fallbackModel: String?
+    public var apiKeyFile: URL?
 
     public init(
         host: String = "127.0.0.1",
@@ -23,7 +24,8 @@ public struct SwiftRouterProxyConfiguration: Sendable {
         rewriteOpenAIModels: Bool = true,
         rewriteAllUnmapped: Bool = true,
         modelCatalog: URL? = nil,
-        fallbackModel: String? = nil
+        fallbackModel: String? = nil,
+        apiKeyFile: URL? = nil
     ) {
         self.host = host
         self.port = port
@@ -35,6 +37,7 @@ public struct SwiftRouterProxyConfiguration: Sendable {
         self.rewriteAllUnmapped = rewriteAllUnmapped
         self.modelCatalog = modelCatalog
         self.fallbackModel = fallbackModel
+        self.apiKeyFile = apiKeyFile
     }
 }
 
@@ -42,6 +45,7 @@ public enum SwiftRouterProxyError: Error, LocalizedError {
     case missingValue(String)
     case invalidTarget(String)
     case invalidPort(String)
+    case missingRouterAPIKey
 
     public var errorDescription: String? {
         switch self {
@@ -51,6 +55,8 @@ public enum SwiftRouterProxyError: Error, LocalizedError {
             return "Invalid target URL: \(value)"
         case let .invalidPort(value):
             return "Invalid port: \(value)"
+        case .missingRouterAPIKey:
+            return "The local 9Router API key file is missing or empty."
         }
     }
 }
@@ -168,16 +174,20 @@ public final class SwiftRouterProxy: @unchecked Sendable {
         urlRequest.httpBody = outgoingBody.isEmpty ? nil : outgoingBody
         urlRequest.timeoutInterval = 300
 
-        for (name, value) in request.headers {
-            let lower = name.lowercased()
-            if ["host", "content-length", "transfer-encoding", "connection"].contains(lower) {
-                continue
+        let routerAPIKey: String?
+        if let apiKeyFile = configuration.apiKeyFile {
+            guard let key = Self.readAPIKey(from: apiKeyFile) else {
+                throw SwiftRouterProxyError.missingRouterAPIKey
             }
-            if lower == "accept-encoding" {
-                urlRequest.setValue("identity", forHTTPHeaderField: name)
-            } else {
-                urlRequest.setValue(value, forHTTPHeaderField: name)
-            }
+            routerAPIKey = key
+        } else {
+            routerAPIKey = nil
+        }
+        for (name, value) in Self.upstreamHeaders(
+            from: request.headers,
+            routerAPIKey: routerAPIKey
+        ) {
+            urlRequest.setValue(value, forHTTPHeaderField: name)
         }
         if !outgoingBody.isEmpty {
             urlRequest.setValue(String(outgoingBody.count), forHTTPHeaderField: "Content-Length")
@@ -400,6 +410,7 @@ public final class SwiftRouterProxy: @unchecked Sendable {
         var rewriteAllUnmapped = true
         var modelCatalog: URL?
         var fallbackModel: String?
+        var apiKeyFile: URL?
 
         var index = 0
         while index < arguments.count {
@@ -443,6 +454,8 @@ public final class SwiftRouterProxy: @unchecked Sendable {
                 modelCatalog = URL(fileURLWithPath: try value())
             case "--fallback-to":
                 fallbackModel = try value()
+            case "--api-key-file":
+                apiKeyFile = URL(fileURLWithPath: try value())
             default:
                 break
             }
@@ -459,8 +472,67 @@ public final class SwiftRouterProxy: @unchecked Sendable {
             rewriteOpenAIModels: rewriteOpenAIModels,
             rewriteAllUnmapped: rewriteAllUnmapped,
             modelCatalog: modelCatalog,
-            fallbackModel: fallbackModel
+            fallbackModel: fallbackModel,
+            apiKeyFile: apiKeyFile
         )
+    }
+
+    static func upstreamHeaders(
+        from incomingHeaders: [String: String],
+        routerAPIKey: String?
+    ) -> [String: String] {
+        var outgoing: [String: String] = [:]
+        for (name, value) in incomingHeaders {
+            let lower = name.lowercased()
+            if ["host", "content-length", "transfer-encoding", "connection"].contains(lower) {
+                continue
+            }
+            if routerAPIKey != nil && (
+                lower == "authorization"
+                || lower == "cookie"
+                || lower.hasPrefix("chatgpt-")
+                || lower.hasPrefix("x-openai-")
+                || lower.hasPrefix("x-oai-")
+            ) {
+                continue
+            }
+            outgoing[name] = lower == "accept-encoding" ? "identity" : value
+        }
+        if let routerAPIKey {
+            outgoing["Authorization"] = "Bearer \(routerAPIKey)"
+        }
+        return outgoing
+    }
+
+    static func readAPIKey(from url: URL) -> String? {
+        guard let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        for line in content.components(separatedBy: .newlines) {
+            let lowered = line.trimmingCharacters(in: .whitespaces).lowercased()
+            guard lowered.hasPrefix("ninerouter_api_key")
+                || lowered.hasPrefix("nine_router_api_key")
+                || lowered.hasPrefix("9router_api_key")
+                || lowered.hasPrefix("ninerouter_token")
+                || lowered.hasPrefix("nine_router_token")
+                || lowered.hasPrefix("export ninerouter_api_key") else {
+                continue
+            }
+            guard let equals = line.firstIndex(of: "=") else {
+                continue
+            }
+            let value = String(line[line.index(after: equals)...])
+                .split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
+                .first
+                .map(String.init) ?? ""
+            let clean = value.trimmingCharacters(
+                in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'"))
+            )
+            if !clean.isEmpty {
+                return clean
+            }
+        }
+        return nil
     }
 }
 

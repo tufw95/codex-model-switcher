@@ -8,6 +8,8 @@ Native macOS app for switching Codex between the authentic provider and a 9Route
 - Saves `NINEROUTER_API_KEY` once to `~/.codex/.env` and exports it through `launchctl`.
 - Generates `~/.codex/9router-model-catalog.json` so custom models appear in the Codex model picker.
 - Starts a local Swift LaunchAgent proxy on `127.0.0.1:9783`.
+- Preserves ChatGPT sign-in while routing model requests through 9Router, so account-enabled sidebar items remain available.
+- Replaces OpenAI authentication at the local proxy boundary and never forwards ChatGPT tokens or account headers to 9Router.
 - Rewrites Codex config safely while preserving unrelated settings.
 - Keeps the Chrome/node_repl repair logic from the original AppleScript bundle.
 - Checks an update manifest and shows a macOS notification when a newer version is available.
@@ -32,6 +34,7 @@ The app converts `gpt 5.6` to:
 
 Codex then sees `gpt-5.6` in its model picker, while the proxy forwards requests to `cx/gpt-5.6`.
 If 9Router exposes a `Codex` combo, the app routes through `cx/codex` by default.
+When the user is signed in with ChatGPT, the generated provider uses `requires_openai_auth = true` for authentic account capabilities. The proxy independently reads the 9Router key from `~/.codex/.env`, strips private OpenAI headers, and applies the router key before forwarding the model request.
 
 ## Build
 

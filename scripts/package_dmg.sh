@@ -10,6 +10,7 @@ DMG_ROOT="$DIST_DIR/dmg-root"
 DMG_PATH="$DIST_DIR/${APP_NAME// /-}-${VERSION}.dmg"
 RW_DMG_PATH="${TMPDIR:-/tmp}/codex-model-switcher-${VERSION}-rw.dmg"
 MOUNT_DIR=""
+PACKAGE_STAGE_DIR=""
 
 clean_bundle_xattrs() {
   local target="$1"
@@ -42,6 +43,9 @@ cleanup_mount() {
     rmdir "$MOUNT_DIR" >/dev/null 2>&1 || true
   fi
   rm -f "$RW_DMG_PATH" >/dev/null 2>&1 || true
+  if [[ -n "$PACKAGE_STAGE_DIR" && -d "$PACKAGE_STAGE_DIR" ]]; then
+    rm -rf "$PACKAGE_STAGE_DIR" >/dev/null 2>&1 || true
+  fi
 }
 
 trap cleanup_mount EXIT
@@ -50,13 +54,17 @@ if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
   "$ROOT_DIR/scripts/build_app.sh"
 fi
 
-verify_bundle "$APP_DIR"
+PACKAGE_STAGE_DIR="$(mktemp -d)"
+PACKAGE_APP_DIR="$PACKAGE_STAGE_DIR/${APP_NAME}.app"
+ditto --norsrc --noextattr "$APP_DIR" "$PACKAGE_APP_DIR"
+clean_bundle_xattrs "$PACKAGE_APP_DIR"
+verify_bundle "$PACKAGE_APP_DIR"
 
 rm -rf "$DMG_ROOT" "$DMG_PATH" "$RW_DMG_PATH"
 MOUNT_DIR="$(mktemp -d)"
 hdiutil create -size 40m -fs APFS -volname "$APP_NAME" -ov "$RW_DMG_PATH" >/dev/null
 hdiutil attach "$RW_DMG_PATH" -mountpoint "$MOUNT_DIR" -nobrowse -quiet
-ditto --norsrc --noextattr "$APP_DIR" "$MOUNT_DIR/${APP_NAME}.app"
+ditto --norsrc --noextattr "$PACKAGE_APP_DIR" "$MOUNT_DIR/${APP_NAME}.app"
 ln -s /Applications "$MOUNT_DIR/Applications"
 clean_bundle_xattrs "$MOUNT_DIR/${APP_NAME}.app"
 verify_bundle "$MOUNT_DIR/${APP_NAME}.app"

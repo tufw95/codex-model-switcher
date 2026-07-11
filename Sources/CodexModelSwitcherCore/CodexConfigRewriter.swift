@@ -37,7 +37,8 @@ public enum CodexConfigRewriter {
         model: RouterModel,
         catalogPath: String,
         proxyBaseURL: String,
-        reasoningEffort: String = "xhigh"
+        reasoningEffort: String = "xhigh",
+        useChatGPTAuthentication: Bool = true
     ) -> String {
         var header: [String] = []
         switch profile {
@@ -68,7 +69,7 @@ public enum CodexConfigRewriter {
             [model_providers.NineRouter]
             name = "9Router"
             base_url = "\(escape(proxyBaseURL))"
-            env_key = "NINEROUTER_API_KEY"
+            \(useChatGPTAuthentication ? "requires_openai_auth = true" : "env_key = \"NINEROUTER_API_KEY\"")
             wire_api = "responses"
             """
         }
