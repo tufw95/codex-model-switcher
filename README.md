@@ -47,7 +47,7 @@ The app is not limited to `9router.bigroll.vn`:
 3. Click the checkmark to save it.
 4. Enter the API key for that router and switch to `9Router`.
 
-The URL is stored locally and restored on the next launch. A custom server must provide an OpenAI-compatible `/v1/models` endpoint and accept Codex requests such as `/v1/responses`. Base paths are supported, for example `https://gateway.example.com/team`.
+The URL is stored locally and restored on the next launch. A custom server must provide an OpenAI-compatible `/v1/models` endpoint and accept Codex requests such as `/v1/responses`. Base paths are supported, for example `https://gateway.example.com/team`. URLs ending in `/v1` or `/v1/models` are accepted and normalized automatically.
 
 Remote servers must use HTTPS because the app sends the configured API key to that server. Plain HTTP is accepted only for `localhost`, `127.0.0.1`, or `::1` development endpoints.
 

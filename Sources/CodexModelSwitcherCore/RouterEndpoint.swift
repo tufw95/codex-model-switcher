@@ -49,8 +49,17 @@ public enum RouterEndpoint {
 
         components.scheme = scheme
         components.host = host
-        let cleanPath = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        components.path = cleanPath.isEmpty ? "" : "/\(cleanPath)"
+        var pathParts = components.path
+            .split(separator: "/")
+            .map(String.init)
+        if pathParts.count >= 2,
+           pathParts[pathParts.count - 2].caseInsensitiveCompare("v1") == .orderedSame,
+           pathParts.last?.caseInsensitiveCompare("models") == .orderedSame {
+            pathParts.removeLast(2)
+        } else if pathParts.last?.caseInsensitiveCompare("v1") == .orderedSame {
+            pathParts.removeLast()
+        }
+        components.path = pathParts.isEmpty ? "" : "/\(pathParts.joined(separator: "/"))"
 
         guard let url = components.url else {
             throw RouterEndpointError.invalidURL

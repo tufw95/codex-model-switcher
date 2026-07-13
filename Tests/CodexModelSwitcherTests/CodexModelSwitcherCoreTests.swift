@@ -17,6 +17,17 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         }
     }
 
+    func testRouterEndpointAcceptsCommonV1AndModelListURLs() throws {
+        XCTAssertEqual(
+            try RouterEndpoint.normalizedURL(from: "https://router.example.com/v1").absoluteString,
+            "https://router.example.com"
+        )
+        XCTAssertEqual(
+            try RouterEndpoint.normalizedURL(from: "https://gateway.example.com/team/v1/models").absoluteString,
+            "https://gateway.example.com/team"
+        )
+    }
+
     func testRouterEndpointRejectsCredentialsAndQueryStrings() {
         XCTAssertThrowsError(try RouterEndpoint.normalizedURL(from: "https://user:pass@router.example.com")) {
             XCTAssertEqual($0 as? RouterEndpointError, .embeddedCredentials)

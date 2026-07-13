@@ -29,7 +29,7 @@ App khong bi khoa vao `9router.bigroll.vn`:
 3. Bam dau check de luu.
 4. Dien API key cua router do, sau do chon `9Router`.
 
-App se nho URL nay cho cac lan mo sau. Router can co API tuong thich OpenAI, toi thieu gom `/v1/models` va endpoint nhan request nhu `/v1/responses`. Router tren Internet bat buoc dung HTTPS de API key duoc ma hoa khi truyen; HTTP chi duoc chap nhan cho localhost khi phat trien.
+App se nho URL nay cho cac lan mo sau. Router can co API tuong thich OpenAI, toi thieu gom `/v1/models` va endpoint nhan request nhu `/v1/responses`. Co the dan URL goc, URL ket thuc bang `/v1`, hoac `/v1/models`; app se tu chuan hoa. Router tren Internet bat buoc dung HTTPS de API key duoc ma hoa khi truyen; HTTP chi duoc chap nhan cho localhost khi phat trien.
 
 App se tu:
 
