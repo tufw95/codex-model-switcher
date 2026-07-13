@@ -591,14 +591,19 @@ struct RouterSettingsPanel: View {
                         .foregroundStyle(.secondary)
                     TextField("https://9router.bigroll.vn", text: $app.routerTarget)
                         .textFieldStyle(.roundedBorder)
+                        .onSubmit { app.saveRouterTarget() }
                     Button {
-                        app.refreshStatus()
+                        app.saveRouterTarget()
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        Image(systemName: "checkmark")
                     }
-                    .help("Refresh status")
+                    .help("Save router URL")
                 }
             }
+
+            Text("HTTPS is required except for localhost development. Your API key is sent to this router.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if let path = app.status.codexCLIPath {
                 Text(path)

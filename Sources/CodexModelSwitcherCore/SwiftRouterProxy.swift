@@ -48,6 +48,7 @@ public enum SwiftRouterProxyError: Error, LocalizedError {
     case missingValue(String)
     case invalidTarget(String)
     case invalidPort(String)
+    case invalidHost(String)
     case missingRouterAPIKey
 
     public var errorDescription: String? {
@@ -58,6 +59,8 @@ public enum SwiftRouterProxyError: Error, LocalizedError {
             return "Invalid target URL: \(value)"
         case let .invalidPort(value):
             return "Invalid port: \(value)"
+        case let .invalidHost(value):
+            return "Proxy host must be loopback-only: \(value)"
         case .missingRouterAPIKey:
             return "The local 9Router API key file is missing or empty."
         }
@@ -83,7 +86,18 @@ public final class SwiftRouterProxy: @unchecked Sendable {
         guard let port = NWEndpoint.Port(rawValue: configuration.port) else {
             throw SwiftRouterProxyError.invalidPort(String(configuration.port))
         }
-        let listener = try NWListener(using: .tcp, on: port)
+        guard RouterEndpoint.isLoopbackHost(configuration.host) else {
+            throw SwiftRouterProxyError.invalidHost(configuration.host)
+        }
+        guard (try? RouterEndpoint.normalizedURL(from: configuration.target.absoluteString)) != nil else {
+            throw SwiftRouterProxyError.invalidTarget(configuration.target.absoluteString)
+        }
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(
+            host: NWEndpoint.Host(configuration.host),
+            port: port
+        )
+        let listener = try NWListener(using: parameters)
         listener.newConnectionHandler = { [weak self] connection in
             self?.handle(connection)
         }
@@ -487,7 +501,9 @@ public final class SwiftRouterProxy: @unchecked Sendable {
                 port = parsed
             case "--target":
                 let raw = try value()
-                guard let parsed = URL(string: raw) else { throw SwiftRouterProxyError.invalidTarget(raw) }
+                guard let parsed = try? RouterEndpoint.normalizedURL(from: raw) else {
+                    throw SwiftRouterProxyError.invalidTarget(raw)
+                }
                 target = parsed
             case "--rewrite-map":
                 let raw = try value()

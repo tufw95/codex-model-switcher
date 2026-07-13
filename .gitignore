@@ -9,4 +9,9 @@ dist/
 # Local secrets and generated user config should never be committed.
 .env
 *.p8
+*.p12
+*.pem
+*.key
+*.cer
 *.mobileprovision
+*.provisionprofile

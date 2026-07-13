@@ -11,11 +11,11 @@ A native macOS menu bar app that switches Codex between the authentic OpenAI pro
 
 Download the latest DMG from:
 
-**[Codex Model Switcher 1.1.0](https://github.com/tufw95/codex-model-switcher/releases/latest)**
+**[Download the latest Codex Model Switcher](https://github.com/tufw95/codex-model-switcher/releases/latest)**
 
 ## Quick Start
 
-1. Download and open `Codex-Model-Switcher-1.1.0.dmg`.
+1. Download and open the latest `Codex-Model-Switcher-<version>.dmg`.
 2. Drag `Codex Model Switcher` into `Applications`.
 3. Open the app and enter your 9Router API key once.
 4. Use the menu bar icon to choose `9Router` or `Authentic`.
@@ -38,11 +38,24 @@ Codex Model Switcher is designed to require no manual model configuration:
 
 For compatibility with existing sessions, old backend payloads containing `max` or `ultra` are normalized to `xhigh`. Delegation and summary fields are preserved.
 
+## Use A Different Router
+
+The app is not limited to `9router.bigroll.vn`:
+
+1. Open the menu bar app and choose **Settings**.
+2. Enter the server in **Router URL**, for example `https://router.example.com`.
+3. Click the checkmark to save it.
+4. Enter the API key for that router and switch to `9Router`.
+
+The URL is stored locally and restored on the next launch. A custom server must provide an OpenAI-compatible `/v1/models` endpoint and accept Codex requests such as `/v1/responses`. Base paths are supported, for example `https://gateway.example.com/team`.
+
+Remote servers must use HTTPS because the app sends the configured API key to that server. Plain HTTP is accepted only for `localhost`, `127.0.0.1`, or `::1` development endpoints.
+
 ## Switching Behavior
 
 ### 9Router
 
-- Starts a native Swift proxy on `127.0.0.1:9783`.
+- Starts a native Swift proxy bound only to `127.0.0.1:9783`.
 - Generates `~/.codex/9router-model-catalog.json` for the Codex model picker.
 - Preserves ChatGPT sign-in and account-enabled sidebar features.
 - Removes private OpenAI authentication headers before forwarding requests.
@@ -86,7 +99,7 @@ Requirements:
 git clone https://github.com/tufw95/codex-model-switcher.git
 cd codex-model-switcher
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
-VERSION=1.1.0 BUILD_NUMBER=14 ./scripts/package_dmg.sh
+VERSION=1.1.1 BUILD_NUMBER=15 ./scripts/package_dmg.sh
 ```
 
 Build outputs are written to `dist/`.
@@ -96,8 +109,8 @@ Build outputs are written to `dist/`.
 The GitHub Actions release workflow runs whenever a `v*` tag is pushed:
 
 ```bash
-git tag -a v1.1.1 -m "Codex Model Switcher 1.1.1"
-git push origin v1.1.1
+git tag -a v1.1.2 -m "Codex Model Switcher 1.1.2"
+git push origin v1.1.2
 ```
 
 The workflow tests the project, builds the DMG, generates `update.json`, and uploads both files to GitHub Releases.
@@ -108,14 +121,14 @@ For warning-free public installation, build with an Apple Developer ID identity 
 
 ```bash
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-VERSION=1.1.1 \
-BUILD_NUMBER=15 \
+VERSION=1.1.2 \
+BUILD_NUMBER=16 \
 ./scripts/package_dmg.sh
 
 APPLE_ID="you@example.com" \
 APPLE_TEAM_ID="TEAMID" \
 APPLE_APP_PASSWORD="app-specific-password" \
-VERSION=1.1.1 \
+VERSION=1.1.2 \
 ./scripts/notarize.sh
 ```
 
@@ -140,6 +153,8 @@ The app may create or update:
 - The key is stored locally in `~/.codex/.env` with restricted permissions.
 - The app does not upload the key to GitHub or include it in release artifacts.
 - ChatGPT cookies and OpenAI account tokens are not forwarded to 9Router.
+
+Security issues should be reported privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

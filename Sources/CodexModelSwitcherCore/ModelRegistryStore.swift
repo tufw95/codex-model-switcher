@@ -73,7 +73,8 @@ public final class ModelRegistryStore: @unchecked Sendable {
     }
 
     public func refreshFromRouter(apiKey: String, targetBaseURL: URL) async throws -> [RouterModel] {
-        let url = modelListURL(from: targetBaseURL)
+        let safeBaseURL = try RouterEndpoint.normalizedURL(from: targetBaseURL.absoluteString)
+        let url = modelListURL(from: safeBaseURL)
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"

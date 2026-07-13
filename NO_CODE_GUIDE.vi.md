@@ -7,7 +7,7 @@ Tai lieu nay danh cho nguoi dung macOS chi muon mo app va dung, khong can biet b
 Nguoi quan ly team gui link GitHub Release hoac file:
 
 ```text
-Codex-Model-Switcher-1.0.0.dmg
+Codex-Model-Switcher-<version>.dmg
 ```
 
 Nguoi dung mo file `.dmg`, keo `Codex Model Switcher.app` vao `Applications`, roi mo app.
@@ -20,6 +20,17 @@ Nguoi dung mo file `.dmg`, keo `Codex Model Switcher.app` vao `Applications`, ro
 4. Neu app hoi API key, dan 9Router API key vao va bam `Save`.
 5. Chon `9Router` hoac `Authentic`.
 
+## Dung Router Khac
+
+App khong bi khoa vao `9router.bigroll.vn`:
+
+1. Mo `Settings` trong app.
+2. Dien dia chi moi vao `Router URL`, vi du `https://router.example.com`.
+3. Bam dau check de luu.
+4. Dien API key cua router do, sau do chon `9Router`.
+
+App se nho URL nay cho cac lan mo sau. Router can co API tuong thich OpenAI, toi thieu gom `/v1/models` va endpoint nhan request nhu `/v1/responses`. Router tren Internet bat buoc dung HTTPS de API key duoc ma hoa khi truyen; HTTP chi duoc chap nhan cho localhost khi phat trien.
+
 App se tu:
 
 - Luu API key local tren may nguoi dung tai `~/.codex/.env`.
@@ -29,7 +40,7 @@ App se tu:
 - Lay ten, thu tu, Effort va Speed tu catalog chinh hang cua Codex.
 - Giu cac muc Effort chinh hang hoat dong duoc nhu `Max`, va tu loai `Ultra` khoi catalog 9Router de tranh chon nham che do khong duoc ho tro.
 - Cap nhat mapping model ma khong can restart proxy hoac Codex.
-- Start local proxy.
+- Start proxy chi tren may local tai `127.0.0.1:9783`.
 - Cap nhat config Codex.
 - Mo mot thread Codex moi.
 
@@ -47,7 +58,7 @@ Neu model cung co trong catalog chinh hang cua Codex, app dung ten, thu tu va co
 
 Lan cai dau tien can gui file `.dmg` cho moi nguoi.
 
-Sau do, neu app duoc build voi `UPDATE_MANIFEST_URL`, moi nguoi se thay thong bao khi co version moi. Nguoi dung bam `Download` de tai ban moi.
+Sau do, moi nguoi se thay thong bao khi co version moi. Nguoi dung bam update de app tu tai DMG, kiem tra checksum/signature, cai dat va mo lai app.
 
 De update hoat dong, nguoi quan ly team can upload:
 

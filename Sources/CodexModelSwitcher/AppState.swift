@@ -54,8 +54,9 @@ final class AppState: ObservableObject {
             loadedUpdateSettings.manifestURL = bundledURL
         }
         self.updateSettings = loadedUpdateSettings
-        self.routerTarget = teamPreset.routerTargetURL
-        if let url = URL(string: teamPreset.routerTargetURL) {
+        let initialRouterURL = RouterTargetSettings.load(bundledValue: teamPreset.routerTargetURL)
+        self.routerTarget = initialRouterURL.absoluteString
+        if let url = try? RouterEndpoint.normalizedURL(from: self.routerTarget) {
             self.codexService = CodexService(routerTargetURL: url)
         }
         load()
@@ -145,6 +146,19 @@ final class AppState: ObservableObject {
         }
     }
 
+    func saveRouterTarget() {
+        do {
+            let url = try RouterTargetSettings.save(routerTarget)
+            routerTarget = url.absoluteString
+            codexService = CodexService(routerTargetURL: url)
+            statusMessage = "Router URL saved"
+            errorMessage = nil
+            refreshStatus()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func addModel() {
         let value = newModelName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else {
@@ -201,9 +215,12 @@ final class AppState: ObservableObject {
             }
             return
         }
-        guard let url = URL(string: routerTarget) else {
+        let url: URL
+        do {
+            url = try RouterEndpoint.normalizedURL(from: routerTarget)
+        } catch {
             if !silent {
-                errorMessage = "Router URL is invalid."
+                errorMessage = error.localizedDescription
             }
             return
         }
@@ -246,8 +263,15 @@ final class AppState: ObservableObject {
     }
 
     func switchToNineRouter() {
-        if let url = URL(string: routerTarget) {
+        let url: URL
+        do {
+            url = try RouterTargetSettings.save(routerTarget)
+            routerTarget = url.absoluteString
             codexService = CodexService(routerTargetURL: url)
+        } catch {
+            errorMessage = error.localizedDescription
+            statusMessage = "Switch failed"
+            return
         }
         Task {
             isBusy = true
@@ -271,8 +295,13 @@ final class AppState: ObservableObject {
     }
 
     func runSafetyCheck() {
-        if let url = URL(string: routerTarget) {
+        do {
+            let url = try RouterEndpoint.normalizedURL(from: routerTarget)
             codexService = CodexService(routerTargetURL: url)
+        } catch {
+            errorMessage = error.localizedDescription
+            statusMessage = "Safety check failed"
+            return
         }
         let apiKey = apiKeyInput.contains("...") ? codexService.readAPIKey() : apiKeyInput
         preflightReport = codexService.validateNineRouterSetup(

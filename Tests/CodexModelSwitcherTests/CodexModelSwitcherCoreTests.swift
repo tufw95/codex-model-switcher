@@ -2,6 +2,94 @@ import XCTest
 @testable import CodexModelSwitcherCore
 
 final class CodexModelSwitcherCoreTests: XCTestCase {
+    func testRouterEndpointNormalizesSecureCustomURL() throws {
+        let url = try RouterEndpoint.normalizedURL(from: "  HTTPS://Router.Example.com/team/  ")
+        XCTAssertEqual(url.absoluteString, "https://router.example.com/team")
+    }
+
+    func testRouterEndpointAllowsHTTPOnlyForLoopback() throws {
+        XCTAssertEqual(
+            try RouterEndpoint.normalizedURL(from: "http://127.0.0.1:9000").absoluteString,
+            "http://127.0.0.1:9000"
+        )
+        XCTAssertThrowsError(try RouterEndpoint.normalizedURL(from: "http://router.example.com")) {
+            XCTAssertEqual($0 as? RouterEndpointError, .insecureRemoteURL)
+        }
+    }
+
+    func testRouterEndpointRejectsCredentialsAndQueryStrings() {
+        XCTAssertThrowsError(try RouterEndpoint.normalizedURL(from: "https://user:pass@router.example.com")) {
+            XCTAssertEqual($0 as? RouterEndpointError, .embeddedCredentials)
+        }
+        XCTAssertThrowsError(try RouterEndpoint.normalizedURL(from: "https://router.example.com?token=secret")) {
+            XCTAssertEqual($0 as? RouterEndpointError, .queryOrFragmentNotAllowed)
+        }
+    }
+
+    func testRouterTargetSettingsPersistAndRestoreCustomURL() throws {
+        let suiteName = "CodexModelSwitcherTests.RouterTarget.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(
+            RouterTargetSettings.load(
+                bundledValue: "https://9router.bigroll.vn",
+                defaults: defaults
+            ),
+            URL(string: "https://9router.bigroll.vn")
+        )
+
+        try RouterTargetSettings.save("https://router.example.com/team/", defaults: defaults)
+        XCTAssertEqual(
+            RouterTargetSettings.load(
+                bundledValue: "https://9router.bigroll.vn",
+                defaults: defaults
+            ),
+            URL(string: "https://router.example.com/team")
+        )
+    }
+
+    func testProxyRejectsNonLoopbackBinding() {
+        let proxy = SwiftRouterProxy(configuration: SwiftRouterProxyConfiguration(
+            host: "0.0.0.0",
+            port: 19783,
+            rewriteTo: "cx/codex"
+        ))
+        XCTAssertThrowsError(try proxy.start()) {
+            guard case SwiftRouterProxyError.invalidHost("0.0.0.0") = $0 else {
+                return XCTFail("Unexpected error: \($0)")
+            }
+        }
+    }
+
+    func testProxyRejectsInsecureRemoteTarget() {
+        let proxy = SwiftRouterProxy(configuration: SwiftRouterProxyConfiguration(
+            port: 19784,
+            target: URL(string: "http://router.example.com")!,
+            rewriteTo: "cx/codex"
+        ))
+        XCTAssertThrowsError(try proxy.start()) {
+            guard case SwiftRouterProxyError.invalidTarget("http://router.example.com") = $0 else {
+                return XCTFail("Unexpected error: \($0)")
+            }
+        }
+    }
+
+    func testRegistryRejectsInsecureRemoteTargetBeforeSendingAPIKey() async {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodexModelSwitcherUnsafeTarget-\(UUID().uuidString)", isDirectory: true)
+        let store = ModelRegistryStore(paths: AppPaths(home: root))
+        do {
+            _ = try await store.refreshFromRouter(
+                apiKey: "must-not-be-sent",
+                targetBaseURL: URL(string: "http://router.example.com")!
+            )
+            XCTFail("Expected insecure router URL to be rejected")
+        } catch {
+            XCTAssertEqual(error as? RouterEndpointError, .insecureRemoteURL)
+        }
+    }
+
     func testModelInferenceNormalizesFriendlyNames() {
         let model = RouterModel.inferred(from: "gpt 5.6")
         XCTAssertEqual(model.codexSlug, "gpt-5.6")
