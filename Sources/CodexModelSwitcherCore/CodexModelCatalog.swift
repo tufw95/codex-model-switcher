@@ -94,6 +94,8 @@ public enum CodexModelCatalog {
         fallbackTemplate: [String: Any]?
     ) -> [String: Any] {
         var entry = exactTemplate ?? fallbackTemplate ?? minimalTemplate()
+        let requiredTemplate = fallbackTemplate ?? exactTemplate ?? minimalTemplate()
+        copyMissingRequiredFields(into: &entry, from: requiredTemplate)
         entry["slug"] = model.codexSlug
         entry["display_name"] = model.displayName
         entry["description"] = model.notes ?? "9Router model routed through Codex Model Switcher."
@@ -106,11 +108,37 @@ public enum CodexModelCatalog {
         return entry
     }
 
+    private static func copyMissingRequiredFields(
+        into entry: inout [String: Any],
+        from template: [String: Any]
+    ) {
+        for key in requiredTemplateKeys where entry[key] == nil {
+            if let value = template[key] ?? minimalTemplate()[key] {
+                entry[key] = value
+            }
+        }
+    }
+
+    private static let requiredTemplateKeys = [
+        "base_instructions",
+        "model_messages",
+        "supported_reasoning_levels",
+        "shell_type",
+        "supports_reasoning_summaries",
+        "default_reasoning_summary",
+        "support_verbosity",
+        "default_verbosity"
+    ]
+
     private static func minimalTemplate() -> [String: Any] {
-        [
+        let baseInstructions = """
+        You are Codex, an agent based on GPT-5. You and the user share one workspace, and your job is to collaborate with them until their goal is genuinely handled.
+        """
+        return [
             "slug": "gpt-5.5",
             "display_name": "GPT-5.5",
             "description": "9Router model routed through Codex Model Switcher.",
+            "base_instructions": baseInstructions,
             "default_reasoning_level": "medium",
             "supported_reasoning_levels": [
                 ["effort": "low", "description": "Fast responses with lighter reasoning"],
@@ -125,7 +153,15 @@ public enum CodexModelCatalog {
             "supports_reasoning_summaries": true,
             "default_reasoning_summary": "none",
             "support_verbosity": true,
-            "default_verbosity": "medium"
+            "default_verbosity": "medium",
+            "model_messages": [
+                "instructions_template": baseInstructions,
+                "instructions_variables": [
+                    "personality_default": "",
+                    "personality_friendly": "",
+                    "personality_pragmatic": ""
+                ]
+            ]
         ]
     }
 }

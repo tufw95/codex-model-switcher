@@ -400,6 +400,66 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertEqual(levels.compactMap { $0["effort"] as? String }, ["low", "high"])
     }
 
+    func testCatalogBuilderRepairsExistingTemplateMissingBaseInstructions() throws {
+        let existingCatalogURL = try temporaryFile(
+            named: "broken-catalog.json",
+            contents: """
+            {
+              "models": [{
+                "slug": "codex",
+                "display_name": "Codex",
+                "supported_reasoning_levels": [
+                  {"effort": "medium", "description": "Medium"}
+                ]
+              }]
+            }
+            """
+        )
+        let fakeCLI = try temporaryExecutable(
+            named: "codex",
+            output: """
+            {
+              "models": [{
+                "slug": "gpt-5.6-sol",
+                "display_name": "GPT-5.6-SOL",
+                "base_instructions": "Bundled instructions",
+                "model_messages": {
+                  "instructions_template": "Bundled instructions",
+                  "instructions_variables": {}
+                },
+                "supported_reasoning_levels": [
+                  {"effort": "medium", "description": "Medium"}
+                ],
+                "shell_type": "shell_command",
+                "supports_reasoning_summaries": true,
+                "default_reasoning_summary": "none",
+                "support_verbosity": true,
+                "default_verbosity": "low"
+              }]
+            }
+            """
+        )
+        let combo = RouterModel(
+            codexSlug: "codex",
+            displayName: "Codex",
+            upstreamModel: "Codex",
+            visible: false,
+            reasoningEffort: "medium",
+            priority: 0,
+            notes: "9Router Combo"
+        )
+
+        let data = try CodexModelCatalog.buildData(
+            models: [combo],
+            existingCatalogURL: existingCatalogURL,
+            codexCLI: fakeCLI
+        )
+        let model = try XCTUnwrap(catalogModel(from: data, slug: "codex"))
+        XCTAssertEqual(model["base_instructions"] as? String, "Bundled instructions")
+        XCTAssertNotNil(model["model_messages"] as? [String: Any])
+        XCTAssertEqual(model["visibility"] as? String, "hide")
+    }
+
     private func catalogModel(from data: Data, slug: String) throws -> [String: Any]? {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let models = json?["models"] as? [[String: Any]]
