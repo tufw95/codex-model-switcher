@@ -1,5 +1,33 @@
 import Foundation
 
+public enum ModelCapabilitySource: String, Codable, Sendable {
+    case codexCatalog
+    case routerMetadata
+    case conservative
+}
+
+public struct RouterReasoningLevel: Codable, Equatable, Sendable {
+    public var effort: String
+    public var description: String
+
+    public init(effort: String, description: String) {
+        self.effort = effort
+        self.description = description
+    }
+}
+
+public struct RouterServiceTier: Codable, Equatable, Sendable {
+    public var id: String
+    public var name: String
+    public var description: String
+
+    public init(id: String, name: String, description: String) {
+        self.id = id
+        self.name = name
+        self.description = description
+    }
+}
+
 public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
     public var id: String { codexSlug }
     public var codexSlug: String
@@ -10,6 +38,11 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
     public var reasoningEffort: String
     public var priority: Int
     public var notes: String?
+    public var visibilityOverride: Bool?
+    public var capabilitySource: ModelCapabilitySource?
+    public var supportedReasoningLevels: [RouterReasoningLevel]?
+    public var additionalSpeedTiers: [String]?
+    public var serviceTiers: [RouterServiceTier]?
 
     public init(
         codexSlug: String,
@@ -19,7 +52,12 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
         visible: Bool = true,
         reasoningEffort: String = "xhigh",
         priority: Int = 100,
-        notes: String? = nil
+        notes: String? = nil,
+        visibilityOverride: Bool? = nil,
+        capabilitySource: ModelCapabilitySource? = nil,
+        supportedReasoningLevels: [RouterReasoningLevel]? = nil,
+        additionalSpeedTiers: [String]? = nil,
+        serviceTiers: [RouterServiceTier]? = nil
     ) {
         self.codexSlug = codexSlug
         self.displayName = displayName
@@ -29,6 +67,11 @@ public struct RouterModel: Codable, Equatable, Identifiable, Sendable {
         self.reasoningEffort = reasoningEffort
         self.priority = priority
         self.notes = notes
+        self.visibilityOverride = visibilityOverride
+        self.capabilitySource = capabilitySource
+        self.supportedReasoningLevels = supportedReasoningLevels
+        self.additionalSpeedTiers = additionalSpeedTiers
+        self.serviceTiers = serviceTiers
     }
 
     public static let defaults: [RouterModel] = [

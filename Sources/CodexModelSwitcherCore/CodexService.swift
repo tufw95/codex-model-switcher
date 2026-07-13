@@ -334,7 +334,9 @@ public final class CodexService {
             "--target",
             routerTargetURL.absoluteString,
             "--api-key-file",
-            paths.codexEnvFile.path
+            paths.codexEnvFile.path,
+            "--model-registry",
+            paths.modelRegistry.path
         ]
 
         for model in allModels {

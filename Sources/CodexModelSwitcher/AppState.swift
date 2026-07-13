@@ -35,6 +35,7 @@ final class AppState: ObservableObject {
     private let teamPreset: TeamPreset
     private var didBootstrap = false
     private var updateMonitorTask: Task<Void, Never>?
+    private var modelMonitorTask: Task<Void, Never>?
 
     init(
         registry: ModelRegistryStore = ModelRegistryStore(),
@@ -68,17 +69,6 @@ final class AppState: ObservableObject {
     }
 
     var preferredNineRouterModel: RouterModel {
-        if let sol = models.first(where: {
-            $0.visible && $0.codexSlug.caseInsensitiveCompare("gpt-5.6-sol") == .orderedSame
-        }) {
-            return sol
-        }
-        if let latest = models
-            .filter({ $0.visible && $0.codexSlug.contains("gpt-5.6") && !$0.codexSlug.contains("review") })
-            .sorted(by: { $0.priority < $1.priority })
-            .first {
-            return latest
-        }
         if let visible = models.filter(\.visible).sorted(by: { $0.priority < $1.priority }).first {
             return visible
         }
@@ -102,7 +92,15 @@ final class AppState: ObservableObject {
 
     func load() {
         do {
-            models = try registry.load()
+            let loaded = try registry.load()
+            let enriched = CodexModelCatalog.applyingOfficialMetadata(
+                to: loaded,
+                codexCLI: codexService.detectCodexCLI()
+            )
+            models = enriched
+            if enriched != loaded {
+                try registry.save(enriched)
+            }
             if !models.contains(where: { $0.codexSlug == selectedModelID }) {
                 selectedModelID = models.first?.codexSlug ?? "gpt-5.5"
             }
@@ -125,6 +123,7 @@ final class AppState: ObservableObject {
         guard teamPreset.autoRefreshModelsOnLaunch else {
             return
         }
+        startPeriodicModelSync()
         await refreshModelsFromRouter(silent: true)
     }
 
@@ -181,6 +180,7 @@ final class AppState: ObservableObject {
             return
         }
         models[index].visible.toggle()
+        models[index].visibilityOverride = models[index].visible
         do {
             try registry.save(models)
         } catch {
@@ -213,14 +213,26 @@ final class AppState: ObservableObject {
             statusMessage = "Refreshing models from 9Router"
         }
         do {
-            let service = ModelRegistryStore()
-            let fresh = try await service.refreshFromRouter(apiKey: key, targetBaseURL: url)
+            let previousSlugs = Set(models.map(\.codexSlug))
+            let routerModels = try await registry.refreshFromRouter(apiKey: key, targetBaseURL: url)
+            let fresh = CodexModelCatalog.applyingOfficialMetadata(
+                to: routerModels,
+                codexCLI: codexService.detectCodexCLI()
+            )
+            try registry.save(fresh)
             models = fresh
-            try? codexService.writeModelCatalog(models: fresh)
+            try codexService.writeModelCatalog(models: fresh)
             if !models.contains(where: { $0.codexSlug == selectedModelID }) {
-                selectedModelID = models.first?.codexSlug ?? selectedModelID
+                selectedModelID = models.first(where: \.visible)?.codexSlug
+                    ?? models.first?.codexSlug
+                    ?? selectedModelID
             }
-            statusMessage = "Model list refreshed"
+            if !silent {
+                let addedCount = Set(fresh.map(\.codexSlug)).subtracting(previousSlugs).count
+                statusMessage = addedCount > 0
+                    ? "Added \(addedCount) new 9Router model\(addedCount == 1 ? "" : "s")"
+                    : "Model list is up to date"
+            }
         } catch {
             if !silent {
                 errorMessage = error.localizedDescription
@@ -436,6 +448,21 @@ final class AppState: ObservableObject {
                     return
                 }
                 await self.checkForUpdates(silent: true, force: true)
+            }
+        }
+    }
+
+    private func startPeriodicModelSync() {
+        guard modelMonitorTask == nil else {
+            return
+        }
+        modelMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 15 * 60 * 1_000_000_000)
+                guard !Task.isCancelled, let self else {
+                    return
+                }
+                await self.refreshModelsFromRouter(silent: true, showProgress: false)
             }
         }
     }

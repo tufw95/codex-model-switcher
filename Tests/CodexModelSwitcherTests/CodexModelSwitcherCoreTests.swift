@@ -10,6 +10,29 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertTrue(model.aliases.contains("openai/gpt-5.6"))
     }
 
+    func testRegistryDecodesLegacyModelsWithoutCapabilityMetadata() throws {
+        let data = Data("""
+        {
+          "version": 1,
+          "models": [{
+            "codexSlug": "gpt-5.6-sol",
+            "displayName": "5.6 Sol",
+            "upstreamModel": "cx/gpt-5.6-sol",
+            "aliases": ["openai/gpt-5.6-sol"],
+            "visible": true,
+            "reasoningEffort": "xhigh",
+            "priority": 10
+          }]
+        }
+        """.utf8)
+
+        let file = try JSONDecoder().decode(ModelRegistryFile.self, from: data)
+        let model = try XCTUnwrap(file.models.first)
+        XCTAssertEqual(model.codexSlug, "gpt-5.6-sol")
+        XCTAssertNil(model.capabilitySource)
+        XCTAssertNil(model.supportedReasoningLevels)
+    }
+
     func testRouterDisplayNamesAndPrioritiesMatchOfficialPicker() {
         XCTAssertEqual(RouterModel.displayName(for: "cx/codex"), "Codex")
         XCTAssertEqual(RouterModel.displayName(for: "gpt-5.6-sol"), "5.6 Sol")
@@ -21,7 +44,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertTrue(RouterModel.defaultVisibility(for: "gpt-5.4-mini"))
     }
 
-    func testRouterRefreshModelsReplaceStaleLocalPriorities() throws {
+    func testRouterRefreshRemovesStaleAutomaticModels() throws {
         let combo = try XCTUnwrap(ModelRegistryStore.model(fromRouterItem: [
             "id": "Codex",
             "owned_by": "combo"
@@ -48,13 +71,42 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
 
         XCTAssertEqual(
             merged.map(\.codexSlug),
-            ["codex", "gpt-5.6-sol", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"]
+            ["codex", "gpt-5.6-sol", "gpt-5.5"]
         )
         XCTAssertEqual(combo.displayName, "Codex")
         XCTAssertEqual(combo.upstreamModel, "Codex")
         XCTAssertFalse(combo.visible)
         XCTAssertEqual(combo.notes, "9Router Combo")
-        XCTAssertEqual(sol.displayName, "5.6 Sol")
+        XCTAssertEqual(sol.displayName, "GPT-5.6-SOL")
+    }
+
+    func testRouterRefreshKeepsCachedOfficialMetadataWhenRouterHasOnlyIDs() throws {
+        let routerModel = try XCTUnwrap(ModelRegistryStore.model(fromRouterItem: [
+            "id": "cx/gpt-5.6-sol"
+        ]))
+        let cached = RouterModel(
+            codexSlug: "gpt-5.6-sol",
+            displayName: "GPT-5.6-Sol",
+            upstreamModel: "cx/gpt-5.6-sol",
+            reasoningEffort: "xhigh",
+            priority: 1,
+            capabilitySource: .codexCatalog,
+            supportedReasoningLevels: [
+                RouterReasoningLevel(effort: "xhigh", description: "Extra High")
+            ],
+            additionalSpeedTiers: ["fast"]
+        )
+
+        let merged = ModelRegistryStore().merge(
+            routerModels: [routerModel],
+            localModels: [cached]
+        )
+        let model = try XCTUnwrap(merged.first)
+        XCTAssertEqual(model.displayName, "GPT-5.6-Sol")
+        XCTAssertEqual(model.priority, 1)
+        XCTAssertEqual(model.capabilitySource, .codexCatalog)
+        XCTAssertEqual(model.supportedReasoningLevels?.map(\.effort), ["xhigh"])
+        XCTAssertEqual(model.additionalSpeedTiers, ["fast"])
     }
 
     func testVisibleRouterModelsMatchOfficialPickerOrder() {
@@ -83,7 +135,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
             .sorted { $0.priority < $1.priority }
             .map(\.displayName)
 
-        XCTAssertEqual(visibleNames, ["5.6 Sol", "5.6 Terra", "5.6 Luna", "5.5", "5.4", "5.4 Mini"])
+        XCTAssertEqual(visibleNames, ["5.6 Sol", "5.6 Terra", "5.6 Luna", "5.5", "5.4 Mini"])
     }
 
     func testConfigRewritePreservesUnrelatedSections() {
@@ -359,7 +411,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertEqual((model["service_tiers"] as? [[String: Any]])?.first?["id"] as? String, "priority")
     }
 
-    func testCatalogBuilderKeepsExistingMetadataForRouterOnlyModel() throws {
+    func testCatalogBuilderKeepsCustomMetadataButUsesConservativeCapabilities() throws {
         let existingCatalogURL = try temporaryFile(
             named: "custom-catalog.json",
             contents: """
@@ -397,7 +449,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertEqual(model["display_name"] as? String, "5.7 Team")
         XCTAssertEqual(model["custom_router_capability"] as? Bool, true)
         let levels = try XCTUnwrap(model["supported_reasoning_levels"] as? [[String: Any]])
-        XCTAssertEqual(levels.compactMap { $0["effort"] as? String }, ["low", "high"])
+        XCTAssertEqual(levels.compactMap { $0["effort"] as? String }, ["medium"])
     }
 
     func testCatalogBuilderRepairsExistingTemplateMissingBaseInstructions() throws {
@@ -458,6 +510,200 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertEqual(model["base_instructions"] as? String, "Bundled instructions")
         XCTAssertNotNil(model["model_messages"] as? [String: Any])
         XCTAssertEqual(model["visibility"] as? String, "hide")
+    }
+
+    func testOfficialMetadataControlsNameOrderAndKeepsOfficialUltraUI() throws {
+        let fakeCLI = try temporaryExecutable(
+            named: "codex",
+            output: """
+            {
+              "models": [{
+                "slug": "gpt-5.7-team",
+                "display_name": "GPT-5.7-Team",
+                "priority": 2,
+                "visibility": "list",
+                "default_reasoning_level": "low",
+                "supported_reasoning_levels": [
+                  {"effort": "low", "description": "Low"},
+                  {"effort": "medium", "description": "Medium"},
+                  {"effort": "xhigh", "description": "Extra High"},
+                  {"effort": "max", "description": "Max"},
+                  {"effort": "ultra", "description": "Unsupported"}
+                ],
+                "additional_speed_tiers": ["fast"],
+                "service_tiers": [{
+                  "id": "priority",
+                  "name": "Fast",
+                  "description": "Higher throughput"
+                }]
+              }]
+            }
+            """
+        )
+
+        let enriched = CodexModelCatalog.applyingOfficialMetadata(
+            to: [RouterModel.inferred(from: "gpt-5.7-team")],
+            codexCLI: fakeCLI
+        )
+        let model = try XCTUnwrap(enriched.first)
+        XCTAssertEqual(model.displayName, "GPT-5.7-Team")
+        XCTAssertEqual(model.priority, 2)
+        XCTAssertEqual(model.reasoningEffort, "xhigh")
+        XCTAssertEqual(model.supportedReasoningLevels?.map(\.effort), ["low", "medium", "xhigh", "max", "ultra"])
+        XCTAssertEqual(model.additionalSpeedTiers, ["fast"])
+        XCTAssertEqual(model.serviceTiers?.map(\.id), ["priority"])
+    }
+
+    func testRouterCapabilitiesAreIntersectedWithOfficialCatalog() throws {
+        let fakeCLI = try temporaryExecutable(
+            named: "codex",
+            output: """
+            {
+              "models": [{
+                "slug": "gpt-5.7-team",
+                "display_name": "GPT-5.7-Team",
+                "priority": 2,
+                "visibility": "list",
+                "default_reasoning_level": "medium",
+                "supported_reasoning_levels": [
+                  {"effort": "low", "description": "Low"},
+                  {"effort": "medium", "description": "Medium"},
+                  {"effort": "high", "description": "High"},
+                  {"effort": "xhigh", "description": "Extra High"},
+                  {"effort": "max", "description": "Max"},
+                  {"effort": "ultra", "description": "Unsupported"}
+                ],
+                "additional_speed_tiers": ["fast"],
+                "service_tiers": [{"id":"priority","name":"Fast","description":"Fast"}]
+              }]
+            }
+            """
+        )
+        let routerModel = RouterModel(
+            codexSlug: "gpt-5.7-team",
+            displayName: "Team",
+            upstreamModel: "cx/gpt-5.7-team",
+            reasoningEffort: "ultra",
+            capabilitySource: .routerMetadata,
+            supportedReasoningLevels: [
+                RouterReasoningLevel(effort: "high", description: "High"),
+                RouterReasoningLevel(effort: "xhigh", description: "Extra High"),
+                RouterReasoningLevel(effort: "ultra", description: "Unsupported")
+            ],
+            additionalSpeedTiers: [],
+            serviceTiers: []
+        )
+
+        let model = try XCTUnwrap(CodexModelCatalog.applyingOfficialMetadata(
+            to: [routerModel],
+            codexCLI: fakeCLI
+        ).first)
+        XCTAssertEqual(model.supportedReasoningLevels?.map(\.effort), ["high", "xhigh", "ultra"])
+        XCTAssertEqual(model.reasoningEffort, "ultra")
+        XCTAssertNil(model.additionalSpeedTiers)
+        XCTAssertNil(model.serviceTiers)
+    }
+
+    func testProxyReloadsDynamicRoutingWithoutRestart() throws {
+        let registryURL = try temporaryFile(
+            named: "models.json",
+            contents: String(data: try JSONEncoder().encode(ModelRegistryFile(models: [
+                RouterModel.inferred(from: "gpt-5.6-sol")
+            ])), encoding: .utf8) ?? ""
+        )
+
+        let first = SwiftRouterProxy.dynamicRouting(from: registryURL)
+        XCTAssertEqual(first.rewriteMap["gpt-5.6-sol"], "cx/gpt-5.6-sol")
+        XCTAssertNil(first.rewriteMap["gpt-5.7-team"])
+
+        let updated = ModelRegistryFile(models: [
+            RouterModel.inferred(from: "gpt-5.7-team"),
+            RouterModel(
+                codexSlug: "codex",
+                displayName: "Codex",
+                upstreamModel: "Codex",
+                visible: false,
+                notes: "9Router Combo"
+            )
+        ])
+        try JSONEncoder().encode(updated).write(to: registryURL, options: .atomic)
+
+        let second = SwiftRouterProxy.dynamicRouting(from: registryURL)
+        XCTAssertNil(second.rewriteMap["gpt-5.6-sol"])
+        XCTAssertEqual(second.rewriteMap["gpt-5.7-team"], "cx/gpt-5.7-team")
+        XCTAssertEqual(second.fallbackModel, "Codex")
+    }
+
+    func testProxyNormalizesUnsupportedBackendEffortWithoutRemovingDelegationFields() {
+        var payload: [String: Any] = [
+            "reasoning": [
+                "effort": "ultra",
+                "summary": "auto"
+            ],
+            "reasoning_effort": "max",
+            "delegation": ["enabled": true]
+        ]
+
+        XCTAssertTrue(SwiftRouterProxy.normalizeUnsupportedReasoningEffort(in: &payload))
+        XCTAssertEqual((payload["reasoning"] as? [String: Any])?["effort"] as? String, "xhigh")
+        XCTAssertEqual((payload["reasoning"] as? [String: Any])?["summary"] as? String, "auto")
+        XCTAssertEqual(payload["reasoning_effort"] as? String, "xhigh")
+        XCTAssertEqual((payload["delegation"] as? [String: Any])?["enabled"] as? Bool, true)
+    }
+
+    func testLiveRouterSyncWhenExplicitlyEnabled() async throws {
+        guard ProcessInfo.processInfo.environment["RUN_LIVE_ROUTER_SYNC_TEST"] == "1" else {
+            throw XCTSkip("Live 9Router sync test is opt-in.")
+        }
+        let apiKey = try XCTUnwrap(ProcessInfo.processInfo.environment["LIVE_NINEROUTER_API_KEY"])
+        let cliPath = try XCTUnwrap(ProcessInfo.processInfo.environment["LIVE_CODEX_CLI_PATH"])
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodexModelSwitcherLiveSync-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let paths = AppPaths(home: root)
+        let store = ModelRegistryStore(paths: paths)
+        let routerModels = try await store.refreshFromRouter(
+            apiKey: apiKey,
+            targetBaseURL: try XCTUnwrap(URL(string: "https://9router.bigroll.vn"))
+        )
+        let models = CodexModelCatalog.applyingOfficialMetadata(
+            to: routerModels,
+            codexCLI: URL(fileURLWithPath: cliPath)
+        )
+        try store.save(models)
+        try CodexModelCatalog.write(
+            models: models,
+            to: paths.generatedModelCatalog,
+            codexCLI: URL(fileURLWithPath: cliPath)
+        )
+
+        let data = try Data(contentsOf: paths.generatedModelCatalog)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let catalogModels = try XCTUnwrap(json["models"] as? [[String: Any]])
+        XCTAssertEqual(catalogModels.count, models.count)
+        XCTAssertFalse(catalogModels.isEmpty)
+        XCTAssertEqual(
+            catalogModels.filter {
+                $0["base_instructions"] == nil
+                    || $0["model_messages"] == nil
+                    || $0["supported_reasoning_levels"] == nil
+                    || $0["shell_type"] == nil
+            }.count,
+            0
+        )
+        let sol = try XCTUnwrap(catalogModels.first { $0["slug"] as? String == "gpt-5.6-sol" })
+        let solEfforts = (sol["supported_reasoning_levels"] as? [[String: Any]] ?? [])
+            .compactMap { $0["effort"] as? String }
+        XCTAssertTrue(solEfforts.contains("ultra"))
+
+        let routing = SwiftRouterProxy.dynamicRouting(from: paths.modelRegistry)
+        for model in models where model.notes != "9Router Combo" {
+            XCTAssertEqual(routing.rewriteMap[model.codexSlug], model.upstreamModel)
+        }
     }
 
     private func catalogModel(from data: Data, slug: String) throws -> [String: Any]? {

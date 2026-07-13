@@ -24,7 +24,11 @@ App se tu:
 
 - Luu API key local tren may nguoi dung tai `~/.codex/.env`.
 - Tu dong sync model tu 9Router khi mo app va khi chuyen sang 9Router.
+- Tu dong kiem tra model moi moi 15 phut.
 - Tao model catalog de Codex thay model moi.
+- Lay ten, thu tu, Effort va Speed tu catalog chinh hang cua Codex.
+- Giu giao dien `Max` va `Ultra` giong Codex chinh hang; proxy tu chuyen tham so backend khong tuong thich ve `xhigh` ma van giu che do delegation.
+- Cap nhat mapping model ma khong can restart proxy hoac Codex.
 - Start local proxy.
 - Cap nhat config Codex.
 - Mo mot thread Codex moi.
@@ -34,10 +38,10 @@ App se tu:
 Neu model da ton tai trong 9Router hoac Combo cua team:
 
 1. Them model/Combo tren 9Router.
-2. Bam icon `Codex Switch` tren thanh menu macOS.
-3. Bam `9Router`.
+2. Khong can sua config hoac them model trong Codex Switch.
+3. App se tu dong nhan model trong lan dong bo tiep theo, toi da khoang 15 phut.
 
-App se tu sync danh sach model tu 9Router va tao catalog local cho Codex. App khong tu tao Combo tren 9Router neu 9Router khong cung cap admin API cho viec do.
+Neu model cung co trong catalog chinh hang cua Codex, app dung ten, thu tu va control chinh hang. Neu model chi co tren 9Router, app van them model nhung chi hien control an toan. App khong tu tao Combo tren 9Router neu 9Router khong cung cap admin API cho viec do.
 
 ## Update App
 

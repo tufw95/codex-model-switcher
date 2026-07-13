@@ -7,6 +7,10 @@ Native macOS app for switching Codex between the authentic provider and a 9Route
 - Runs as a SwiftUI menu bar-only macOS app.
 - Saves `NINEROUTER_API_KEY` once to `~/.codex/.env` and exports it through `launchctl`.
 - Generates `~/.codex/9router-model-catalog.json` so custom models appear in the Codex model picker.
+- Synchronizes 9Router models on launch, before switching, and every 15 minutes while the app is running.
+- Uses the installed Codex catalog for official model names, visibility, ordering, Effort, and Speed metadata.
+- Keeps the official `Max` and `Ultra` UI, while normalizing unsupported backend effort values to `xhigh` before forwarding to 9Router.
+- Lets the running proxy reload model mappings from `models.json` without restarting Codex or the proxy.
 - Starts a local Swift LaunchAgent proxy on `127.0.0.1:9783`.
 - Preserves ChatGPT sign-in while routing model requests through 9Router, so account-enabled sidebar items remain available.
 - Replaces OpenAI authentication at the local proxy boundary and never forwards ChatGPT tokens or account headers to 9Router.
@@ -33,8 +37,12 @@ The app converts `gpt 5.6` to:
 ```
 
 Codex then sees `gpt-5.6` in its model picker, while the proxy forwards requests to `cx/gpt-5.6`.
-If 9Router exposes a `Codex` combo, the app routes through `cx/codex` by default.
+If 9Router exposes a `Codex` combo, the proxy keeps it as an automatic fallback for transient upstream failures.
 When the user is signed in with ChatGPT, the generated provider uses `requires_openai_auth = true` for authentic account capabilities. The proxy independently reads the 9Router key from `~/.codex/.env`, strips private OpenAI headers, and applies the router key before forwarding the model request.
+
+Model availability comes from the 9Router `/v1/models` response. Presentation metadata comes from the bundled catalog in the installed Codex app. A model added to both 9Router and the official Codex catalog therefore appears automatically with the official name and priority. A router-only model still appears, but receives conservative controls until verified capability metadata becomes available.
+
+The Codex desktop client currently represents Ultra sessions with `xhigh` reasoning plus delegation metadata. The proxy preserves those delegation fields. If a request contains a literal backend effort of `max` or `ultra`, only that unsupported effort value is normalized to `xhigh` so 9Router does not reject the request.
 
 ## Build
 
