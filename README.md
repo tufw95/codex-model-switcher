@@ -9,7 +9,7 @@ Native macOS app for switching Codex between the authentic provider and a 9Route
 - Generates `~/.codex/9router-model-catalog.json` so custom models appear in the Codex model picker.
 - Synchronizes 9Router models on launch, before switching, and every 15 minutes while the app is running.
 - Uses the installed Codex catalog for official model names, visibility, ordering, Effort, and Speed metadata.
-- Keeps the official `Max` and `Ultra` UI, while normalizing unsupported backend effort values to `xhigh` before forwarding to 9Router.
+- Keeps supported official Effort controls such as `Max`, while removing unsupported `Ultra` from the 9Router catalog.
 - Lets the running proxy reload model mappings from `models.json` without restarting Codex or the proxy.
 - Starts a local Swift LaunchAgent proxy on `127.0.0.1:9783`.
 - Preserves ChatGPT sign-in while routing model requests through 9Router, so account-enabled sidebar items remain available.
@@ -42,7 +42,7 @@ When the user is signed in with ChatGPT, the generated provider uses `requires_o
 
 Model availability comes from the 9Router `/v1/models` response. Presentation metadata comes from the bundled catalog in the installed Codex app. A model added to both 9Router and the official Codex catalog therefore appears automatically with the official name and priority. A router-only model still appears, but receives conservative controls until verified capability metadata becomes available.
 
-The Codex desktop client currently represents Ultra sessions with `xhigh` reasoning plus delegation metadata. The proxy preserves those delegation fields. If a request contains a literal backend effort of `max` or `ultra`, only that unsupported effort value is normalized to `xhigh` so 9Router does not reject the request.
+For upgrade compatibility, the proxy still accepts old requests containing a literal backend effort of `max` or `ultra` and normalizes only that unsupported value to `xhigh`. Delegation and summary fields remain unchanged.
 
 ## Build
 

@@ -27,7 +27,7 @@ App se tu:
 - Tu dong kiem tra model moi moi 15 phut.
 - Tao model catalog de Codex thay model moi.
 - Lay ten, thu tu, Effort va Speed tu catalog chinh hang cua Codex.
-- Giu giao dien `Max` va `Ultra` giong Codex chinh hang; proxy tu chuyen tham so backend khong tuong thich ve `xhigh` ma van giu che do delegation.
+- Giu cac muc Effort chinh hang hoat dong duoc nhu `Max`, va tu loai `Ultra` khoi catalog 9Router de tranh chon nham che do khong duoc ho tro.
 - Cap nhat mapping model ma khong can restart proxy hoac Codex.
 - Start local proxy.
 - Cap nhat config Codex.

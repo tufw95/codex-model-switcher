@@ -406,7 +406,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         )
         let model = try XCTUnwrap(catalogModel(from: data, slug: "gpt-5.6-sol"))
         let levels = try XCTUnwrap(model["supported_reasoning_levels"] as? [[String: Any]])
-        XCTAssertEqual(levels.compactMap { $0["effort"] as? String }, ["low", "medium", "high", "xhigh", "max", "ultra"])
+        XCTAssertEqual(levels.compactMap { $0["effort"] as? String }, ["low", "medium", "high", "xhigh", "max"])
         XCTAssertEqual(model["additional_speed_tiers"] as? [String], ["fast"])
         XCTAssertEqual((model["service_tiers"] as? [[String: Any]])?.first?["id"] as? String, "priority")
     }
@@ -512,7 +512,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertEqual(model["visibility"] as? String, "hide")
     }
 
-    func testOfficialMetadataControlsNameOrderAndKeepsOfficialUltraUI() throws {
+    func testOfficialMetadataControlsNameOrderAndRemovesUnsupportedUltraUI() throws {
         let fakeCLI = try temporaryExecutable(
             named: "codex",
             output: """
@@ -549,7 +549,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         XCTAssertEqual(model.displayName, "GPT-5.7-Team")
         XCTAssertEqual(model.priority, 2)
         XCTAssertEqual(model.reasoningEffort, "xhigh")
-        XCTAssertEqual(model.supportedReasoningLevels?.map(\.effort), ["low", "medium", "xhigh", "max", "ultra"])
+        XCTAssertEqual(model.supportedReasoningLevels?.map(\.effort), ["low", "medium", "xhigh", "max"])
         XCTAssertEqual(model.additionalSpeedTiers, ["fast"])
         XCTAssertEqual(model.serviceTiers?.map(\.id), ["priority"])
     }
@@ -598,8 +598,8 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
             to: [routerModel],
             codexCLI: fakeCLI
         ).first)
-        XCTAssertEqual(model.supportedReasoningLevels?.map(\.effort), ["high", "xhigh", "ultra"])
-        XCTAssertEqual(model.reasoningEffort, "ultra")
+        XCTAssertEqual(model.supportedReasoningLevels?.map(\.effort), ["high", "xhigh"])
+        XCTAssertEqual(model.reasoningEffort, "xhigh")
         XCTAssertNil(model.additionalSpeedTiers)
         XCTAssertNil(model.serviceTiers)
     }
@@ -698,7 +698,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         let sol = try XCTUnwrap(catalogModels.first { $0["slug"] as? String == "gpt-5.6-sol" })
         let solEfforts = (sol["supported_reasoning_levels"] as? [[String: Any]] ?? [])
             .compactMap { $0["effort"] as? String }
-        XCTAssertTrue(solEfforts.contains("ultra"))
+        XCTAssertFalse(solEfforts.contains("ultra"))
 
         let routing = SwiftRouterProxy.dynamicRouting(from: paths.modelRegistry)
         for model in models where model.notes != "9Router Combo" {

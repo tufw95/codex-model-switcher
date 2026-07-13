@@ -232,7 +232,7 @@ public enum CodexModelCatalog {
     private static func sanitizedReasoningLevels(
         _ levels: [RouterReasoningLevel]
     ) -> [RouterReasoningLevel] {
-        levels
+        levels.filter { $0.effort.caseInsensitiveCompare("ultra") != .orderedSame }
     }
 
     private static func intersectReasoningLevels(
