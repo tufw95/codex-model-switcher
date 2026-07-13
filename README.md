@@ -99,7 +99,7 @@ Requirements:
 git clone https://github.com/tufw95/codex-model-switcher.git
 cd codex-model-switcher
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
-VERSION=1.1.1 BUILD_NUMBER=15 ./scripts/package_dmg.sh
+VERSION=1.1.2 BUILD_NUMBER=16 ./scripts/package_dmg.sh
 ```
 
 Build outputs are written to `dist/`.
@@ -109,8 +109,8 @@ Build outputs are written to `dist/`.
 The GitHub Actions release workflow runs whenever a `v*` tag is pushed:
 
 ```bash
-git tag -a v1.1.2 -m "Codex Model Switcher 1.1.2"
-git push origin v1.1.2
+git tag -a v1.1.3 -m "Codex Model Switcher 1.1.3"
+git push origin v1.1.3
 ```
 
 The workflow tests the project, builds the DMG, generates `update.json`, and uploads both files to GitHub Releases.
@@ -121,14 +121,14 @@ For warning-free public installation, build with an Apple Developer ID identity 
 
 ```bash
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-VERSION=1.1.2 \
-BUILD_NUMBER=16 \
+VERSION=1.1.3 \
+BUILD_NUMBER=17 \
 ./scripts/package_dmg.sh
 
 APPLE_ID="you@example.com" \
 APPLE_TEAM_ID="TEAMID" \
 APPLE_APP_PASSWORD="app-specific-password" \
-VERSION=1.1.2 \
+VERSION=1.1.3 \
 ./scripts/notarize.sh
 ```
 
