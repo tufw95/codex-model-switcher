@@ -29,13 +29,14 @@ App khong bi khoa vao `9router.bigroll.vn`:
 3. Bam dau check de luu.
 4. Dien API key cua router do, sau do chon `9Router`.
 
-App se nho URL nay cho cac lan mo sau. Router can co API tuong thich OpenAI, toi thieu gom `/v1/models` va endpoint nhan request nhu `/v1/responses`. Co the dan URL goc, URL ket thuc bang `/v1`, hoac `/v1/models`; app se tu chuan hoa. Router tren Internet bat buoc dung HTTPS de API key duoc ma hoa khi truyen; HTTP chi duoc chap nhan cho localhost khi phat trien.
+App se nho URL nay cho cac lan mo sau. Router can co API tuong thich OpenAI, toi thieu gom `/v1/models` va endpoint nhan request nhu `/v1/responses`. Muon hien quota thi router co the cung cap them endpoint read-only `/v1/quota`. Co the dan URL goc, URL ket thuc bang `/v1`, hoac `/v1/models`; app se tu chuan hoa. Router tren Internet bat buoc dung HTTPS de API key duoc ma hoa khi truyen; HTTP chi duoc chap nhan cho localhost khi phat trien.
 
 App se tu:
 
 - Luu API key local tren may nguoi dung tai `~/.codex/.env`.
 - Tu dong sync model tu 9Router khi mo app va khi chuyen sang 9Router.
 - Tu dong kiem tra model moi moi 15 phut.
+- Hien quota Codex ngay trong menu bar va tu cap nhat moi 2 phut neu router co ho tro.
 - Tao model catalog de Codex thay model moi.
 - Lay ten, thu tu, Effort va Speed tu catalog chinh hang cua Codex.
 - Giu cac muc Effort chinh hang hoat dong duoc nhu `Max`, va tu loai `Ultra` khoi catalog 9Router de tranh chon nham che do khong duoc ho tro.
@@ -43,6 +44,12 @@ App se tu:
 - Start proxy chi tren may local tai `127.0.0.1:9783`.
 - Cap nhat config Codex.
 - Mo mot thread Codex moi.
+
+## Xem Quota
+
+Nguoi dung khong can dang nhap dashboard 9Router. Sau khi da luu API key, quota cua cac tai khoan Codex se tu hien trong app, tai khoan gan het quota duoc dua len truoc.
+
+App chi hien email da che, khong luu quota xuong may va khong can password quan tri 9Router. Neu dang dung mot router khac chua co endpoint quota, muc nay se tu an; chuc nang switch van hoat dong binh thuong.
 
 ## Them Model Moi
 

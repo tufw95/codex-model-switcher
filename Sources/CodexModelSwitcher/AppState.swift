@@ -27,24 +27,33 @@ final class AppState: ObservableObject {
     @Published var updateManifest: UpdateManifest?
     @Published var preflightReport: PreflightReport?
     @Published var routerTarget = "https://9router.bigroll.vn"
+    @Published var quotaAccounts: [CodexQuotaAccount] = []
+    @Published var quotaSummary: CodexQuotaSummary?
+    @Published var quotaErrorMessage: String?
+    @Published var isRefreshingQuota = false
+    @Published var quotaFeatureAvailable = true
 
     private let registry: ModelRegistryStore
     private var codexService: CodexService
+    private let quotaService: QuotaService
     private let updateService: UpdateService
     private let updateInstaller: UpdateInstaller
     private let teamPreset: TeamPreset
     private var didBootstrap = false
     private var updateMonitorTask: Task<Void, Never>?
     private var modelMonitorTask: Task<Void, Never>?
+    private var quotaMonitorTask: Task<Void, Never>?
 
     init(
         registry: ModelRegistryStore = ModelRegistryStore(),
         codexService: CodexService = CodexService(),
+        quotaService: QuotaService = QuotaService(),
         updateService: UpdateService = UpdateService(),
         updateInstaller: UpdateInstaller = UpdateInstaller()
     ) {
         self.registry = registry
         self.codexService = codexService
+        self.quotaService = quotaService
         self.updateService = updateService
         self.updateInstaller = updateInstaller
         self.teamPreset = TeamPreset.load()
@@ -121,6 +130,8 @@ final class AppState: ObservableObject {
         requestUpdateNotificationAuthorization()
         await checkForUpdates(silent: true, force: true)
         startPeriodicUpdateChecks()
+        startPeriodicQuotaSync()
+        await loadQuota(silent: true, forceRefresh: false)
         guard teamPreset.autoRefreshModelsOnLaunch else {
             return
         }
@@ -144,6 +155,11 @@ final class AppState: ObservableObject {
             try codexService.saveAPIKey(value)
             return "API key saved to ~/.codex/.env"
         }
+        if errorMessage == nil {
+            Task {
+                await loadQuota(silent: true, forceRefresh: true)
+            }
+        }
     }
 
     func saveRouterTarget() {
@@ -154,6 +170,9 @@ final class AppState: ObservableObject {
             statusMessage = "Router URL saved"
             errorMessage = nil
             refreshStatus()
+            Task {
+                await loadQuota(silent: true, forceRefresh: true)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -205,6 +224,58 @@ final class AppState: ObservableObject {
     func refreshModelsFromRouter() {
         Task {
             await refreshModelsFromRouter(silent: false)
+        }
+    }
+
+    func refreshQuota() {
+        Task {
+            await loadQuota(silent: false, forceRefresh: true)
+        }
+    }
+
+    private func loadQuota(silent: Bool, forceRefresh: Bool) async {
+        guard !isRefreshingQuota else {
+            return
+        }
+        guard let apiKey = codexService.readAPIKey(), !apiKey.isEmpty else {
+            quotaAccounts = []
+            quotaSummary = nil
+            quotaErrorMessage = nil
+            return
+        }
+
+        let targetURL: URL
+        do {
+            targetURL = try RouterEndpoint.normalizedURL(from: routerTarget)
+        } catch {
+            if !silent {
+                quotaErrorMessage = error.localizedDescription
+            }
+            return
+        }
+
+        isRefreshingQuota = true
+        defer { isRefreshingQuota = false }
+        do {
+            let response = try await quotaService.fetch(
+                apiKey: apiKey,
+                targetBaseURL: targetURL,
+                forceRefresh: forceRefresh
+            )
+            quotaAccounts = response.data
+            quotaSummary = response.summary
+            quotaErrorMessage = nil
+            quotaFeatureAvailable = true
+        } catch QuotaServiceError.unsupported {
+            quotaAccounts = []
+            quotaSummary = nil
+            quotaErrorMessage = nil
+            quotaFeatureAvailable = false
+        } catch {
+            quotaFeatureAvailable = true
+            if !silent || quotaAccounts.isEmpty {
+                quotaErrorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -492,6 +563,21 @@ final class AppState: ObservableObject {
                     return
                 }
                 await self.refreshModelsFromRouter(silent: true, showProgress: false)
+            }
+        }
+    }
+
+    private func startPeriodicQuotaSync() {
+        guard quotaMonitorTask == nil else {
+            return
+        }
+        quotaMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2 * 60 * 1_000_000_000)
+                guard !Task.isCancelled, let self else {
+                    return
+                }
+                await self.loadQuota(silent: true, forceRefresh: false)
             }
         }
     }

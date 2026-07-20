@@ -805,6 +805,51 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         }
     }
 
+    func testQuotaURLPreservesCustomRouterBasePath() throws {
+        let baseURL = try XCTUnwrap(URL(string: "https://router.example.com/team"))
+        XCTAssertEqual(
+            QuotaService.quotaURL(from: baseURL).absoluteString,
+            "https://router.example.com/team/v1/quota"
+        )
+    }
+
+    func testQuotaResponseDecodesSanitizedAccounts() throws {
+        let data = Data("""
+        {
+          "object": "codex_quota",
+          "generatedAt": "2026-07-20T00:00:00.000Z",
+          "summary": {
+            "accounts": 1,
+            "availableAccounts": 1,
+            "unavailableAccounts": 0,
+            "lowestRemaining": 60
+          },
+          "data": [{
+            "id": "masked-id",
+            "provider": "codex",
+            "label": "pe***n@example.com",
+            "plan": "plus",
+            "limitReached": false,
+            "quotas": [{
+              "key": "session",
+              "used": 40,
+              "total": 100,
+              "remaining": 60,
+              "resetAt": "2026-07-26T00:00:00.000Z",
+              "unlimited": false
+            }],
+            "resetCredits": { "availableCount": 2 },
+            "status": "available"
+          }]
+        }
+        """.utf8)
+
+        let response = try JSONDecoder().decode(CodexQuotaResponse.self, from: data)
+        XCTAssertEqual(response.summary.lowestRemaining, 60)
+        XCTAssertEqual(response.data.first?.label, "pe***n@example.com")
+        XCTAssertEqual(response.data.first?.primaryQuota?.remaining, 60)
+    }
+
     private func catalogModel(from data: Data, slug: String) throws -> [String: Any]? {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let models = json?["models"] as? [[String: Any]]

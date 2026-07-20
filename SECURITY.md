@@ -21,6 +21,8 @@ Include the affected version, macOS version, reproduction steps, impact, and any
 - HTTP endpoints are accepted only for localhost development.
 - Router API keys are stored locally and are never included in release artifacts.
 - Incoming ChatGPT/OpenAI authentication headers are removed before requests are sent to the configured router.
+- Quota requests use the router API key, return masked account labels, and are kept only in memory by the app.
+- The quota endpoint is read-only and does not expose provider access tokens, refresh tokens, dashboard cookies, or administrative actions.
 - OTA updates verify the manifest checksum, app identity, version, build, and code signature before installation.
 
 The current public build is ad-hoc signed. Apple Developer ID signing and notarization are still required to provide a warning-free first installation and a stronger publisher identity for updates.

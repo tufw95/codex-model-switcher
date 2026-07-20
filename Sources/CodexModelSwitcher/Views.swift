@@ -5,6 +5,7 @@ import SwiftUI
 struct CompactSwitchView: View {
     @EnvironmentObject private var app: AppState
     @State private var editingAPIKey = false
+    @State private var showingAllQuota = false
 
     private var usingNineRouter: Bool {
         app.status.activeProvider == "NineRouter"
@@ -89,6 +90,10 @@ struct CompactSwitchView: View {
                         app.switchToAuthenticCodex()
                     }
                 }
+            }
+
+            if app.status.apiKeyAvailable && app.quotaFeatureAvailable {
+                QuotaSection(showingAll: $showingAllQuota)
             }
 
             if app.isBusy {
@@ -196,6 +201,167 @@ struct CompactSwitchView: View {
         }
         .padding(14)
         .background(.regularMaterial)
+    }
+}
+
+struct QuotaSection: View {
+    @EnvironmentObject private var app: AppState
+    @Binding var showingAll: Bool
+
+    private var visibleAccounts: ArraySlice<CodexQuotaAccount> {
+        app.quotaAccounts.prefix(showingAll ? app.quotaAccounts.count : 3)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Label("Quota", systemImage: "gauge.with.dots.needle.67percent")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if let summary = app.quotaSummary {
+                    Text("\(summary.availableAccounts)/\(summary.accounts)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    app.refreshQuota()
+                } label: {
+                    if app.isRefreshingQuota {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Refresh quota")
+                .disabled(app.isRefreshingQuota)
+            }
+
+            if let error = app.quotaErrorMessage {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            } else if app.isRefreshingQuota && app.quotaAccounts.isEmpty {
+                ProgressView("Loading quota")
+                    .controlSize(.small)
+                    .font(.caption2)
+            } else if app.quotaAccounts.isEmpty {
+                Text("No active Codex accounts")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                if showingAll {
+                    ScrollView {
+                        VStack(spacing: 7) {
+                            ForEach(visibleAccounts) { account in
+                                QuotaAccountRow(account: account)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 220)
+                } else {
+                    VStack(spacing: 7) {
+                        ForEach(visibleAccounts) { account in
+                            QuotaAccountRow(account: account)
+                        }
+                    }
+                }
+
+                if app.quotaAccounts.count > 3 {
+                    Button {
+                        showingAll.toggle()
+                    } label: {
+                        Text(showingAll ? "Show less" : "Show all \(app.quotaAccounts.count)")
+                            .font(.caption2.weight(.medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(9)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct QuotaAccountRow: View {
+    let account: CodexQuotaAccount
+
+    private var quota: CodexQuotaWindow? {
+        account.primaryQuota
+    }
+
+    private var remainingColor: Color {
+        guard let remaining = quota?.remaining else { return .secondary }
+        if remaining <= 20 { return .red }
+        if remaining <= 50 { return .orange }
+        return .green
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(remainingColor)
+                    .frame(width: 6, height: 6)
+                Text(account.label)
+                    .font(.caption2.weight(.medium))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let quota {
+                    Text("\(Int(quota.remaining.rounded()))%")
+                        .font(.caption2.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(remainingColor)
+                } else {
+                    Text("Unavailable")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let quota {
+                HStack(spacing: 7) {
+                    ProgressView(value: quota.remaining, total: max(quota.total, 1))
+                        .progressViewStyle(.linear)
+                        .tint(remainingColor)
+
+                    if let resetAt = quota.resetAt {
+                        Text(resetLabel(resetAt))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(minWidth: 42, alignment: .trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    private func resetLabel(_ value: String) -> String {
+        guard let date = ISO8601DateFormatter().date(from: value) else {
+            return ""
+        }
+        let interval = date.timeIntervalSinceNow
+        if interval <= 0 {
+            return "now"
+        }
+        let seconds = Int(interval)
+        let minutes = seconds / 60
+        if minutes < 60 {
+            return "in \(max(1, minutes))m"
+        }
+        let hours = minutes / 60
+        if hours < 24 {
+            return "in \(hours)h"
+        }
+        return "in \(hours / 24)d"
     }
 }
 
