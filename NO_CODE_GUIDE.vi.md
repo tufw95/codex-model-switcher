@@ -49,7 +49,7 @@ App se tu:
 
 Nguoi dung khong can dang nhap dashboard 9Router. Sau khi da luu API key, quota cua cac tai khoan Codex se tu hien trong app, tai khoan gan het quota duoc dua len truoc.
 
-App chi hien email da che, khong luu quota xuong may va khong can password quan tri 9Router. Neu dang dung mot router khac chua co endpoint quota, muc nay se tu an; chuc nang switch van hoat dong binh thuong.
+App hien email day du de team de nhan biet tung tai khoan, khong luu quota xuong may va khong can password quan tri 9Router. Neu dang dung mot router khac chua co endpoint quota, muc nay se tu an; chuc nang switch van hoat dong binh thuong.
 
 ## Them Model Moi
 

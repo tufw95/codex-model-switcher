@@ -825,9 +825,9 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
             "lowestRemaining": 60
           },
           "data": [{
-            "id": "masked-id",
+            "id": "account-id",
             "provider": "codex",
-            "label": "pe***n@example.com",
+            "label": "person@example.com",
             "plan": "plus",
             "limitReached": false,
             "quotas": [{
@@ -846,7 +846,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
 
         let response = try JSONDecoder().decode(CodexQuotaResponse.self, from: data)
         XCTAssertEqual(response.summary.lowestRemaining, 60)
-        XCTAssertEqual(response.data.first?.label, "pe***n@example.com")
+        XCTAssertEqual(response.data.first?.label, "person@example.com")
         XCTAssertEqual(response.data.first?.primaryQuota?.remaining, 60)
     }
 

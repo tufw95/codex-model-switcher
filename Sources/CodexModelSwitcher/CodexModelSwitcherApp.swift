@@ -21,7 +21,7 @@ struct CodexModelSwitcherApp: App {
         MenuBarExtra {
             CompactSwitchView()
                 .environmentObject(appState)
-                .frame(width: 286)
+                .frame(width: 560)
         } label: {
             Image(nsImage: BrandAssets.menuBarIcon)
                 .renderingMode(.template)

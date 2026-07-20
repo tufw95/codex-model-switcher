@@ -46,7 +46,7 @@ For compatibility with existing sessions, old backend payloads containing `max` 
 - Shows remaining quota, reset time, and account availability directly in the menu bar.
 - Sorts the lowest remaining quota first and refreshes automatically every two minutes.
 - Uses a 60-second server cache so a whole team does not repeatedly query every Codex account.
-- Masks account email addresses and never stores quota responses on disk.
+- Shows full account email addresses for team identification and never stores quota responses on disk.
 - Uses the same locally stored 9Router API key; dashboard passwords and cookies are never required.
 
 Quota tracking is an optional 9Router server extension, not part of the OpenAI API standard. If a custom router does not implement `/v1/quota`, the app hides the quota section and switching continues to work normally.
@@ -112,7 +112,7 @@ Requirements:
 git clone https://github.com/tufw95/codex-model-switcher.git
 cd codex-model-switcher
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
-VERSION=1.2.0 BUILD_NUMBER=17 ./scripts/package_dmg.sh
+VERSION=1.2.1 BUILD_NUMBER=18 ./scripts/package_dmg.sh
 ```
 
 Build outputs are written to `dist/`.
@@ -122,8 +122,8 @@ Build outputs are written to `dist/`.
 The GitHub Actions release workflow runs whenever a `v*` tag is pushed:
 
 ```bash
-git tag -a v1.2.1 -m "Codex Model Switcher 1.2.1"
-git push origin v1.2.1
+git tag -a v1.2.2 -m "Codex Model Switcher 1.2.2"
+git push origin v1.2.2
 ```
 
 The workflow tests the project, builds the DMG, generates `update.json`, and uploads both files to GitHub Releases.
@@ -134,14 +134,14 @@ For warning-free public installation, build with an Apple Developer ID identity 
 
 ```bash
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-VERSION=1.2.1 \
-BUILD_NUMBER=18 \
+VERSION=1.2.2 \
+BUILD_NUMBER=19 \
 ./scripts/package_dmg.sh
 
 APPLE_ID="you@example.com" \
 APPLE_TEAM_ID="TEAMID" \
 APPLE_APP_PASSWORD="app-specific-password" \
-VERSION=1.2.1 \
+VERSION=1.2.2 \
 ./scripts/notarize.sh
 ```
 
@@ -166,7 +166,7 @@ The app may create or update:
 - The key is stored locally in `~/.codex/.env` with restricted permissions.
 - The app does not upload the key to GitHub or include it in release artifacts.
 - ChatGPT cookies and OpenAI account tokens are not forwarded to 9Router.
-- Quota data remains in memory, account labels are masked by the router, and quota responses are not persisted locally.
+- Quota data remains in memory and is not persisted locally. Full account emails are visible to users who hold a valid router API key.
 
 Security issues should be reported privately as described in [SECURITY.md](SECURITY.md).
 

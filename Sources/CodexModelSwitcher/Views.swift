@@ -5,7 +5,6 @@ import SwiftUI
 struct CompactSwitchView: View {
     @EnvironmentObject private var app: AppState
     @State private var editingAPIKey = false
-    @State private var showingAllQuota = false
 
     private var usingNineRouter: Bool {
         app.status.activeProvider == "NineRouter"
@@ -93,7 +92,7 @@ struct CompactSwitchView: View {
             }
 
             if app.status.apiKeyAvailable && app.quotaFeatureAvailable {
-                QuotaSection(showingAll: $showingAllQuota)
+                QuotaSection()
             }
 
             if app.isBusy {
@@ -206,11 +205,10 @@ struct CompactSwitchView: View {
 
 struct QuotaSection: View {
     @EnvironmentObject private var app: AppState
-    @Binding var showingAll: Bool
-
-    private var visibleAccounts: ArraySlice<CodexQuotaAccount> {
-        app.quotaAccounts.prefix(showingAll ? app.quotaAccounts.count : 3)
-    }
+    private let columns = [
+        GridItem(.flexible(), spacing: 14, alignment: .top),
+        GridItem(.flexible(), spacing: 14, alignment: .top),
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -257,32 +255,10 @@ struct QuotaSection: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } else {
-                if showingAll {
-                    ScrollView {
-                        VStack(spacing: 7) {
-                            ForEach(visibleAccounts) { account in
-                                QuotaAccountRow(account: account)
-                            }
-                        }
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                    ForEach(app.quotaAccounts) { account in
+                        QuotaAccountRow(account: account)
                     }
-                    .frame(maxHeight: 220)
-                } else {
-                    VStack(spacing: 7) {
-                        ForEach(visibleAccounts) { account in
-                            QuotaAccountRow(account: account)
-                        }
-                    }
-                }
-
-                if app.quotaAccounts.count > 3 {
-                    Button {
-                        showingAll.toggle()
-                    } label: {
-                        Text(showingAll ? "Show less" : "Show all \(app.quotaAccounts.count)")
-                            .font(.caption2.weight(.medium))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
                 }
             }
         }
@@ -315,6 +291,8 @@ struct QuotaAccountRow: View {
                 Text(account.label)
                     .font(.caption2.weight(.medium))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .help(account.label)
                 Spacer(minLength: 4)
                 if let quota {
                     Text("\(Int(quota.remaining.rounded()))%")
