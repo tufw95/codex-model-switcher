@@ -51,7 +51,7 @@ final class AppState: ObservableObject {
     private var updateMonitorTask: Task<Void, Never>?
     private var modelMonitorTask: Task<Void, Never>?
     private var quotaMonitorTask: Task<Void, Never>?
-    private var updateNotificationActionTask: Task<Void, Never>?
+    private var updateNotificationActionMonitorTask: Task<Void, Never>?
 
     init(
         registry: ModelRegistryStore = ModelRegistryStore(),
@@ -78,7 +78,7 @@ final class AppState: ObservableObject {
             self.codexService = CodexService(routerTargetURL: url)
         }
         load()
-        startUpdateNotificationActionListener()
+        startUpdateNotificationActionMonitor()
         Task {
             await bootstrapOnLaunch()
         }
@@ -549,18 +549,19 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func startUpdateNotificationActionListener() {
-        guard updateNotificationActionTask == nil else {
+    private func startUpdateNotificationActionMonitor() {
+        guard updateNotificationActionMonitorTask == nil else {
             return
         }
-        updateNotificationActionTask = Task { [weak self] in
-            for await _ in NotificationCenter.default.notifications(
-                named: .installAvailableUpdateRequested
-            ) {
+        updateNotificationActionMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
                 guard let self else {
                     return
                 }
-                await self.installUpdateRequestedByNotification()
+                if UserDefaults.standard.bool(forKey: UpdateNotificationCoordinator.pendingInstallKey) {
+                    await self.installUpdateRequestedByNotification()
+                }
             }
         }
     }

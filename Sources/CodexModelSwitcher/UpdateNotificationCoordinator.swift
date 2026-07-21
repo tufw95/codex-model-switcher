@@ -2,12 +2,6 @@ import CodexModelSwitcherCore
 import Foundation
 import UserNotifications
 
-extension Notification.Name {
-    static let installAvailableUpdateRequested = Notification.Name(
-        "CodexModelSwitcher.installAvailableUpdateRequested"
-    )
-}
-
 final class UpdateNotificationCoordinator: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     static let shared = UpdateNotificationCoordinator()
 
@@ -135,7 +129,6 @@ final class UpdateNotificationCoordinator: NSObject, UNUserNotificationCenterDel
         case Self.updateNowActionIdentifier:
             clearSnooze()
             UserDefaults.standard.set(true, forKey: Self.pendingInstallKey)
-            NotificationCenter.default.post(name: .installAvailableUpdateRequested, object: nil)
         case Self.remindLaterActionIdentifier:
             remindLater(version: version, message: message)
         default:
