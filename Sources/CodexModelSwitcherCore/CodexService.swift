@@ -94,7 +94,7 @@ public final class CodexService {
             to: paths.generatedModelCatalog,
             codexCLI: codexCLI
         )
-        try startProxy(selectedModel: selectedModel, allModels: allModels)
+        try startProxy(allModels: allModels)
         try rewriteConfig(
             profile: .nineRouter,
             model: selectedModel,
@@ -296,7 +296,32 @@ public final class CodexService {
         )
     }
 
-    private func startProxy(selectedModel: RouterModel, allModels: [RouterModel]) throws {
+    @discardableResult
+    public func migrateProxyToStrictRoutingIfNeeded(allModels: [RouterModel]) throws -> Bool {
+        guard proxyUsesLegacyModelRouting() else {
+            return false
+        }
+        try startProxy(allModels: allModels)
+        return true
+    }
+
+    private func proxyUsesLegacyModelRouting() -> Bool {
+        guard let data = try? Data(contentsOf: paths.proxyLaunchAgent),
+              let object = try? PropertyListSerialization.propertyList(from: data, format: nil),
+              let plist = object as? [String: Any],
+              let arguments = plist["ProgramArguments"] as? [String] else {
+            return false
+        }
+        return Self.requiresStrictRoutingMigration(arguments: arguments)
+    }
+
+    static func requiresStrictRoutingMigration(arguments: [String]) -> Bool {
+        let legacyFlags = ["--fallback-to", "--rewrite-openai-models", "--rewrite-to", "--rewrite-from"]
+        return !arguments.contains("--strict-model-routing")
+            || legacyFlags.contains(where: arguments.contains)
+    }
+
+    private func startProxy(allModels: [RouterModel]) throws {
         guard let proxyExecutable = proxyExecutableURL(),
               FileManager.default.isExecutableFile(atPath: proxyExecutable.path) else {
             throw CodexServiceError.missingProxyScript
@@ -304,7 +329,6 @@ public final class CodexService {
 
         try writeProxyLaunchAgent(
             proxyExecutable: proxyExecutable,
-            selectedModel: selectedModel,
             allModels: allModels
         )
 
@@ -323,41 +347,17 @@ public final class CodexService {
 
     private func writeProxyLaunchAgent(
         proxyExecutable: URL,
-        selectedModel: RouterModel,
         allModels: [RouterModel]
     ) throws {
-        var arguments = [
-            proxyExecutable.path,
-            "--proxy",
-            "--port",
-            "\(proxyPort)",
-            "--target",
-            routerTargetURL.absoluteString,
-            "--api-key-file",
-            paths.codexEnvFile.path,
-            "--model-registry",
-            paths.modelRegistry.path
-        ]
-
-        for model in allModels {
-            for input in model.rewriteInputs where !input.hasPrefix("cx/") {
-                arguments.append(contentsOf: ["--rewrite-map", "\(input)=\(model.upstreamModel)"])
-                arguments.append(contentsOf: ["--rewrite-from", input])
-            }
-        }
-
-        if let combo = allModels.first(where: { $0.notes == "9Router Combo" }),
-           combo.upstreamModel != selectedModel.upstreamModel {
-            arguments.append(contentsOf: ["--fallback-to", combo.upstreamModel])
-        }
-
-        arguments.append(contentsOf: [
-            "--rewrite-openai-models",
-            "--model-catalog",
-            paths.generatedModelCatalog.path,
-            "--rewrite-to",
-            selectedModel.upstreamModel
-        ])
+        let arguments = Self.strictProxyArguments(
+            proxyExecutable: proxyExecutable,
+            proxyPort: proxyPort,
+            routerTargetURL: routerTargetURL,
+            apiKeyFile: paths.codexEnvFile,
+            modelRegistry: paths.modelRegistry,
+            modelCatalog: paths.generatedModelCatalog,
+            allModels: allModels
+        )
 
         let plist: [String: Any] = [
             "Label": "com.bigroll.codex-model-switcher.proxy",
@@ -370,6 +370,42 @@ public final class CodexService {
         let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
         try FileManager.default.createDirectory(at: paths.launchAgents, withIntermediateDirectories: true)
         try data.write(to: paths.proxyLaunchAgent, options: .atomic)
+    }
+
+    static func strictProxyArguments(
+        proxyExecutable: URL,
+        proxyPort: Int,
+        routerTargetURL: URL,
+        apiKeyFile: URL,
+        modelRegistry: URL,
+        modelCatalog: URL,
+        allModels: [RouterModel]
+    ) -> [String] {
+        var arguments = [
+            proxyExecutable.path,
+            "--proxy",
+            "--port",
+            String(proxyPort),
+            "--target",
+            routerTargetURL.absoluteString,
+            "--api-key-file",
+            apiKeyFile.path,
+            "--model-registry",
+            modelRegistry.path,
+            "--strict-model-routing"
+        ]
+
+        for model in allModels {
+            for input in model.rewriteInputs {
+                arguments.append(contentsOf: ["--rewrite-map", "\(input)=\(model.upstreamModel)"])
+            }
+        }
+
+        arguments.append(contentsOf: [
+            "--model-catalog",
+            modelCatalog.path
+        ])
+        return arguments
     }
 
     private func proxyExecutableURL() -> URL? {

@@ -15,6 +15,7 @@ struct CodexModelSwitcherApp: App {
                 Foundation.exit(1)
             }
         }
+        UpdateNotificationCoordinator.shared.configure()
     }
 
     var body: some Scene {

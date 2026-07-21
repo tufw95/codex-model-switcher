@@ -134,33 +134,46 @@ struct CompactSwitchView: View {
             }
 
             if let update = app.updateManifest {
-                Button {
-                    app.installAvailableUpdate()
-                } label: {
-                    HStack(spacing: 7) {
-                        if app.isInstallingUpdate {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                HStack(spacing: 8) {
+                    Button {
+                        app.installAvailableUpdate()
+                    } label: {
+                        HStack(spacing: 7) {
+                            if app.isInstallingUpdate {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                            }
+                            Text(app.isInstallingUpdate ? "Installing v\(update.version)" : "Install v\(update.version)")
+                                .font(.system(size: 12, weight: .semibold))
+                            Spacer()
+                            if !app.isInstallingUpdate {
+                                Image(systemName: "arrow.up.forward.app")
+                                    .font(.caption2)
+                            }
                         }
-                        Text(app.isInstallingUpdate ? "Installing v\(update.version)" : "Install v\(update.version)")
-                            .font(.system(size: 12, weight: .semibold))
-                        Spacer()
-                        if !app.isInstallingUpdate {
-                            Image(systemName: "arrow.up.forward.app")
-                                .font(.caption2)
-                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background(Color.accentColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .frame(height: 32)
-                    .background(Color.accentColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .buttonStyle(.plain)
+                    .disabled(app.isInstallingUpdate)
+
+                    Button {
+                        app.remindAboutUpdateLater()
+                    } label: {
+                        Label("Remind Later", systemImage: "clock")
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(height: 30)
+                            .padding(.horizontal, 8)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(app.isInstallingUpdate)
                 }
-                .buttonStyle(.plain)
-                .disabled(app.isInstallingUpdate)
             }
 
             HStack(spacing: 10) {
@@ -822,6 +835,10 @@ struct UpdateBanner: View {
                     }
                 }
                 .disabled(app.isInstallingUpdate)
+                Button("Remind Me Later") {
+                    app.remindAboutUpdateLater()
+                }
+                .disabled(app.isInstallingUpdate)
             }
             .padding(12)
             .background(Color.teal.opacity(0.12))
@@ -875,6 +892,10 @@ struct MenuContentView: View {
         if let update = app.updateManifest {
             Button("Install Update v\(update.version)") {
                 app.installAvailableUpdate()
+            }
+            .disabled(app.isInstallingUpdate)
+            Button("Remind Me Later") {
+                app.remindAboutUpdateLater()
             }
             .disabled(app.isInstallingUpdate)
         }

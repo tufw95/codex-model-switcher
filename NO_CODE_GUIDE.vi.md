@@ -41,6 +41,7 @@ App se tu:
 - Lay ten, thu tu, Effort va Speed tu catalog chinh hang cua Codex.
 - Giu cac muc Effort chinh hang hoat dong duoc nhu `Max`, va tu loai `Ultra` khoi catalog 9Router de tranh chon nham che do khong duoc ho tro.
 - Cap nhat mapping model ma khong can restart proxy hoac Codex.
+- Dinh tuyen dung chinh xac model da chon; neu `5.6 Sol` loi thi app bao loi, khong doi sang Combo hay model khac.
 - Start proxy chi tren may local tai `127.0.0.1:9783`.
 - Cap nhat config Codex.
 - Mo mot thread Codex moi.
@@ -65,7 +66,7 @@ Neu model cung co trong catalog chinh hang cua Codex, app dung ten, thu tu va co
 
 Lan cai dau tien can gui file `.dmg` cho moi nguoi.
 
-Sau do, moi nguoi se thay thong bao khi co version moi. Nguoi dung bam update de app tu tai DMG, kiem tra checksum/signature, cai dat va mo lai app.
+Sau do, moi nguoi se thay thong bao khi co version moi. Thong bao co nut `Update Now` de cap nhat ngay va `Remind Me Later` de macOS nhac lai sau 4 gio. App tu tai DMG, kiem tra checksum/signature, cai dat va mo lai app.
 
 De update hoat dong, nguoi quan ly team can upload:
 

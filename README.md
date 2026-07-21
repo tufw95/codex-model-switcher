@@ -37,6 +37,7 @@ Codex Model Switcher is designed to require no manual model configuration:
 - Keeps router-only models available with conservative controls until official metadata exists.
 - Reloads routing from `models.json` without restarting the proxy.
 - Removes unsupported `Ultra` from the generated 9Router catalog.
+- Uses strict model routing: an exact model alias is required and failed requests never switch to a Combo or another model.
 
 For compatibility with existing sessions, old backend payloads containing `max` or `ultra` are normalized to `xhigh`. Delegation and summary fields are preserved.
 
@@ -73,7 +74,8 @@ Remote servers must use HTTPS because the app sends the configured API key to th
 - Preserves ChatGPT sign-in and account-enabled sidebar features.
 - Removes private OpenAI authentication headers before forwarding requests.
 - Applies the locally stored 9Router key only at the proxy boundary.
-- Uses the 9Router `Codex` Combo as a fallback when it is available.
+- Preserves the exact requested model. For example, `5.6 Sol` can only route to `cx/gpt-5.6-sol`.
+- Retries transient gateway errors once with the same model, then returns the error without fallback.
 - Restarts Codex after a provider switch so the new configuration takes effect.
 
 ### Authentic
@@ -100,6 +102,8 @@ When a newer release is available, the app can download and install it directly.
 
 Users can also run **Check for Updates** from the menu bar app at any time.
 
+The app checks for new versions on launch and every hour. Notifications include **Update Now** and **Remind Me Later** actions; reminders are scheduled by macOS for four hours later and work even when the menu bar popup is closed.
+
 ## Build From Source
 
 Requirements:
@@ -112,7 +116,7 @@ Requirements:
 git clone https://github.com/tufw95/codex-model-switcher.git
 cd codex-model-switcher
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
-VERSION=1.2.1 BUILD_NUMBER=18 ./scripts/package_dmg.sh
+VERSION=1.3.0 BUILD_NUMBER=19 ./scripts/package_dmg.sh
 ```
 
 Build outputs are written to `dist/`.
@@ -122,8 +126,8 @@ Build outputs are written to `dist/`.
 The GitHub Actions release workflow runs whenever a `v*` tag is pushed:
 
 ```bash
-git tag -a v1.2.2 -m "Codex Model Switcher 1.2.2"
-git push origin v1.2.2
+git tag -a v1.3.1 -m "Codex Model Switcher 1.3.1"
+git push origin v1.3.1
 ```
 
 The workflow tests the project, builds the DMG, generates `update.json`, and uploads both files to GitHub Releases.
@@ -134,14 +138,14 @@ For warning-free public installation, build with an Apple Developer ID identity 
 
 ```bash
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-VERSION=1.2.2 \
-BUILD_NUMBER=19 \
+VERSION=1.3.1 \
+BUILD_NUMBER=20 \
 ./scripts/package_dmg.sh
 
 APPLE_ID="you@example.com" \
 APPLE_TEAM_ID="TEAMID" \
 APPLE_APP_PASSWORD="app-specific-password" \
-VERSION=1.2.2 \
+VERSION=1.3.1 \
 ./scripts/notarize.sh
 ```
 

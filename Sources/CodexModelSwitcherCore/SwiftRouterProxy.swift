@@ -6,13 +6,8 @@ public struct SwiftRouterProxyConfiguration: Sendable {
     public var port: UInt16
     public var target: URL
     public var rewriteMap: [String: String]
-    public var rewriteFrom: Set<String>
-    public var rewriteTo: String
-    public var rewriteOpenAIModels: Bool
-    public var rewriteAllUnmapped: Bool
     public var modelCatalog: URL?
     public var modelRegistry: URL?
-    public var fallbackModel: String?
     public var apiKeyFile: URL?
 
     public init(
@@ -20,26 +15,16 @@ public struct SwiftRouterProxyConfiguration: Sendable {
         port: UInt16 = 9783,
         target: URL = URL(string: "https://9router.bigroll.vn")!,
         rewriteMap: [String: String] = [:],
-        rewriteFrom: Set<String> = [],
-        rewriteTo: String,
-        rewriteOpenAIModels: Bool = true,
-        rewriteAllUnmapped: Bool = true,
         modelCatalog: URL? = nil,
         modelRegistry: URL? = nil,
-        fallbackModel: String? = nil,
         apiKeyFile: URL? = nil
     ) {
         self.host = host
         self.port = port
         self.target = target
         self.rewriteMap = rewriteMap
-        self.rewriteFrom = rewriteFrom
-        self.rewriteTo = rewriteTo
-        self.rewriteOpenAIModels = rewriteOpenAIModels
-        self.rewriteAllUnmapped = rewriteAllUnmapped
         self.modelCatalog = modelCatalog
         self.modelRegistry = modelRegistry
-        self.fallbackModel = fallbackModel
         self.apiKeyFile = apiKeyFile
     }
 }
@@ -163,17 +148,9 @@ public final class SwiftRouterProxy: @unchecked Sendable {
         var result = try await performUpstreamRequest(request, body: primaryBody)
 
         if isTransientStatus(result.status) {
-            log("upstream returned \(result.status); retrying selected model")
+            log("upstream returned \(result.status); retrying the same model")
             try? await Task.sleep(nanoseconds: 400_000_000)
             result = try await performUpstreamRequest(request, body: primaryBody)
-        }
-
-        if isTransientStatus(result.status),
-           let fallbackModel = currentFallbackModel(),
-           let fallbackBody = bodyBySettingModel(request.body, headers: request.headers, model: fallbackModel),
-           fallbackBody != primaryBody {
-            log("upstream still returned \(result.status); falling back to \(fallbackModel)")
-            result = try await performUpstreamRequest(request, body: fallbackBody)
         }
 
         var body = result.body
@@ -299,59 +276,31 @@ public final class SwiftRouterProxy: @unchecked Sendable {
         return changed
     }
 
-    private func bodyBySettingModel(_ body: Data, headers: [String: String], model: String) -> Data? {
-        guard !body.isEmpty, contentType(headers).contains("json"),
-              let object = try? JSONSerialization.jsonObject(with: body),
-              var payload = object as? [String: Any] else {
-            return nil
-        }
-        payload["model"] = model
-        return try? JSONSerialization.data(withJSONObject: payload, options: [])
-    }
-
     private func rewrittenModel(_ model: String) -> String? {
         if let modelRegistry = configuration.modelRegistry {
             let routing = Self.dynamicRouting(from: modelRegistry)
-            if !routing.rewriteMap.isEmpty {
-                if let mapped = routing.rewriteMap[model] {
-                    return mapped
-                }
-                return fallbackRewrite(for: model, includeStaticRewriteFrom: false)
-            }
+            return Self.strictRewrite(
+                model: model,
+                dynamicRouting: routing,
+                staticMap: configuration.rewriteMap
+            )
         }
-        if let mapped = configuration.rewriteMap[model] {
-            return mapped
-        }
-        return fallbackRewrite(for: model, includeStaticRewriteFrom: true)
+        return Self.strictRewrite(
+            model: model,
+            dynamicRouting: nil,
+            staticMap: configuration.rewriteMap
+        )
     }
 
-    private func fallbackRewrite(
-        for model: String,
-        includeStaticRewriteFrom: Bool
+    static func strictRewrite(
+        model: String,
+        dynamicRouting: DynamicRouting?,
+        staticMap: [String: String]
     ) -> String? {
-        if model.hasPrefix("cx/") {
-            return nil
+        if let dynamicRouting, !dynamicRouting.rewriteMap.isEmpty {
+            return dynamicRouting.rewriteMap[model]
         }
-        if includeStaticRewriteFrom, configuration.rewriteFrom.contains(model) {
-            return configuration.rewriteTo
-        }
-        if configuration.rewriteOpenAIModels, model.hasPrefix("gpt-") || model.hasPrefix("openai/gpt-") {
-            return configuration.rewriteTo
-        }
-        if configuration.rewriteAllUnmapped {
-            return configuration.rewriteTo
-        }
-        return nil
-    }
-
-    private func currentFallbackModel() -> String? {
-        if let modelRegistry = configuration.modelRegistry {
-            let routing = Self.dynamicRouting(from: modelRegistry)
-            if !routing.rewriteMap.isEmpty {
-                return routing.fallbackModel
-            }
-        }
-        return configuration.fallbackModel
+        return staticMap[model]
     }
 
     private func contentType(_ headers: [String: String]) -> String {
@@ -470,13 +419,8 @@ public final class SwiftRouterProxy: @unchecked Sendable {
         var port: UInt16 = 9783
         var target = URL(string: "https://9router.bigroll.vn")!
         var rewriteMap: [String: String] = [:]
-        var rewriteFrom = Set<String>()
-        var rewriteTo: String?
-        var rewriteOpenAIModels = false
-        var rewriteAllUnmapped = true
         var modelCatalog: URL?
         var modelRegistry: URL?
-        var fallbackModel: String?
         var apiKeyFile: URL?
 
         var index = 0
@@ -511,20 +455,14 @@ public final class SwiftRouterProxy: @unchecked Sendable {
                 if parts.count == 2 {
                     rewriteMap[parts[0]] = parts[1]
                 }
-            case "--rewrite-from":
-                rewriteFrom.insert(try value())
-            case "--rewrite-to":
-                rewriteTo = try value()
-            case "--rewrite-openai-models":
-                rewriteOpenAIModels = true
-            case "--no-rewrite-unmapped":
-                rewriteAllUnmapped = false
+            case "--rewrite-from", "--rewrite-to", "--fallback-to":
+                _ = try value()
+            case "--rewrite-openai-models", "--no-rewrite-unmapped", "--strict-model-routing":
+                break
             case "--model-catalog":
                 modelCatalog = URL(fileURLWithPath: try value())
             case "--model-registry":
                 modelRegistry = URL(fileURLWithPath: try value())
-            case "--fallback-to":
-                fallbackModel = try value()
             case "--api-key-file":
                 apiKeyFile = URL(fileURLWithPath: try value())
             default:
@@ -538,38 +476,28 @@ public final class SwiftRouterProxy: @unchecked Sendable {
             port: port,
             target: target,
             rewriteMap: rewriteMap,
-            rewriteFrom: rewriteFrom,
-            rewriteTo: rewriteTo ?? "cx/codex",
-            rewriteOpenAIModels: rewriteOpenAIModels,
-            rewriteAllUnmapped: rewriteAllUnmapped,
             modelCatalog: modelCatalog,
             modelRegistry: modelRegistry,
-            fallbackModel: fallbackModel,
             apiKeyFile: apiKeyFile
         )
     }
 
     struct DynamicRouting: Equatable {
         var rewriteMap: [String: String]
-        var fallbackModel: String?
     }
 
     static func dynamicRouting(from url: URL) -> DynamicRouting {
         guard let data = try? Data(contentsOf: url),
               let file = try? JSONDecoder().decode(ModelRegistryFile.self, from: data) else {
-            return DynamicRouting(rewriteMap: [:], fallbackModel: nil)
+            return DynamicRouting(rewriteMap: [:])
         }
         var rewriteMap: [String: String] = [:]
-        var fallbackModel: String?
         for model in file.models {
             for input in model.rewriteInputs {
                 rewriteMap[input] = model.upstreamModel
             }
-            if model.notes == "9Router Combo" {
-                fallbackModel = model.upstreamModel
-            }
         }
-        return DynamicRouting(rewriteMap: rewriteMap, fallbackModel: fallbackModel)
+        return DynamicRouting(rewriteMap: rewriteMap)
     }
 
     static func upstreamHeaders(

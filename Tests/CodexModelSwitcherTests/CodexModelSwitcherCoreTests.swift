@@ -63,8 +63,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
     func testProxyRejectsNonLoopbackBinding() {
         let proxy = SwiftRouterProxy(configuration: SwiftRouterProxyConfiguration(
             host: "0.0.0.0",
-            port: 19783,
-            rewriteTo: "cx/codex"
+            port: 19783
         ))
         XCTAssertThrowsError(try proxy.start()) {
             guard case SwiftRouterProxyError.invalidHost("0.0.0.0") = $0 else {
@@ -76,8 +75,7 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
     func testProxyRejectsInsecureRemoteTarget() {
         let proxy = SwiftRouterProxy(configuration: SwiftRouterProxyConfiguration(
             port: 19784,
-            target: URL(string: "http://router.example.com")!,
-            rewriteTo: "cx/codex"
+            target: URL(string: "http://router.example.com")!
         ))
         XCTAssertThrowsError(try proxy.start()) {
             guard case SwiftRouterProxyError.invalidTarget("http://router.example.com") = $0 else {
@@ -730,7 +728,49 @@ final class CodexModelSwitcherCoreTests: XCTestCase {
         let second = SwiftRouterProxy.dynamicRouting(from: registryURL)
         XCTAssertNil(second.rewriteMap["gpt-5.6-sol"])
         XCTAssertEqual(second.rewriteMap["gpt-5.7-team"], "cx/gpt-5.7-team")
-        XCTAssertEqual(second.fallbackModel, "Codex")
+        XCTAssertEqual(second.rewriteMap["codex"], "Codex")
+        XCTAssertNil(SwiftRouterProxy.strictRewrite(
+            model: "gpt-5.6-sol",
+            dynamicRouting: second,
+            staticMap: ["gpt-5.6-sol": "cx/gpt-5.6-sol"]
+        ))
+        XCTAssertEqual(SwiftRouterProxy.strictRewrite(
+            model: "gpt-5.7-team",
+            dynamicRouting: second,
+            staticMap: [:]
+        ), "cx/gpt-5.7-team")
+    }
+
+    func testLegacyProxyArgumentsRequireStrictRoutingMigration() {
+        XCTAssertTrue(CodexService.requiresStrictRoutingMigration(arguments: [
+            "CodexModelSwitcher", "--proxy", "--fallback-to", "Codex"
+        ]))
+        XCTAssertTrue(CodexService.requiresStrictRoutingMigration(arguments: [
+            "CodexModelSwitcher", "--proxy", "--rewrite-openai-models"
+        ]))
+        XCTAssertFalse(CodexService.requiresStrictRoutingMigration(arguments: [
+            "CodexModelSwitcher", "--proxy", "--strict-model-routing",
+            "--rewrite-map", "gpt-5.6-sol=cx/gpt-5.6-sol"
+        ]))
+    }
+
+    func testStrictProxyArgumentsContainOnlyExactMappings() {
+        let arguments = CodexService.strictProxyArguments(
+            proxyExecutable: URL(fileURLWithPath: "/Applications/Codex Model Switcher.app/Contents/MacOS/CodexModelSwitcher"),
+            proxyPort: 9783,
+            routerTargetURL: URL(string: "https://router.example.com")!,
+            apiKeyFile: URL(fileURLWithPath: "/tmp/router.env"),
+            modelRegistry: URL(fileURLWithPath: "/tmp/models.json"),
+            modelCatalog: URL(fileURLWithPath: "/tmp/catalog.json"),
+            allModels: [RouterModel.inferred(from: "gpt-5.6-sol")]
+        )
+
+        XCTAssertTrue(arguments.contains("--strict-model-routing"))
+        XCTAssertTrue(arguments.contains("gpt-5.6-sol=cx/gpt-5.6-sol"))
+        XCTAssertFalse(arguments.contains("--fallback-to"))
+        XCTAssertFalse(arguments.contains("--rewrite-openai-models"))
+        XCTAssertFalse(arguments.contains("--rewrite-to"))
+        XCTAssertFalse(arguments.contains("--rewrite-from"))
     }
 
     func testProxyNormalizesUnsupportedBackendEffortWithoutRemovingDelegationFields() {

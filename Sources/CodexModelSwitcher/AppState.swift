@@ -5,6 +5,14 @@ import ServiceManagement
 import SwiftUI
 import UserNotifications
 
+private enum AppStateError: Error, LocalizedError {
+    case noExplicitRouterModel
+
+    var errorDescription: String? {
+        "9Router did not return an explicit model. Combo fallback is disabled, so the switch was cancelled."
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var models: [RouterModel] = []
@@ -43,6 +51,7 @@ final class AppState: ObservableObject {
     private var updateMonitorTask: Task<Void, Never>?
     private var modelMonitorTask: Task<Void, Never>?
     private var quotaMonitorTask: Task<Void, Never>?
+    private var updateNotificationActionTask: Task<Void, Never>?
 
     init(
         registry: ModelRegistryStore = ModelRegistryStore(),
@@ -69,6 +78,7 @@ final class AppState: ObservableObject {
             self.codexService = CodexService(routerTargetURL: url)
         }
         load()
+        startUpdateNotificationActionListener()
         Task {
             await bootstrapOnLaunch()
         }
@@ -78,14 +88,11 @@ final class AppState: ObservableObject {
         models.first(where: { $0.codexSlug == selectedModelID }) ?? models.first ?? RouterModel.defaults[0]
     }
 
-    var preferredNineRouterModel: RouterModel {
-        if let visible = models.filter(\.visible).sorted(by: { $0.priority < $1.priority }).first {
-            return visible
-        }
-        if let combo = models.first(where: { $0.notes == "9Router Combo" }) {
-            return combo
-        }
-        return selectedModel
+    var preferredNineRouterModel: RouterModel? {
+        models
+            .filter { $0.visible && $0.notes != "9Router Combo" }
+            .sorted(by: { $0.priority < $1.priority })
+            .first
     }
 
     var currentVersion: String {
@@ -129,14 +136,17 @@ final class AppState: ObservableObject {
         configureLaunchAtLogin()
         requestUpdateNotificationAuthorization()
         await checkForUpdates(silent: true, force: true)
+        if UserDefaults.standard.bool(forKey: UpdateNotificationCoordinator.pendingInstallKey) {
+            await installUpdateRequestedByNotification()
+        }
         startPeriodicUpdateChecks()
         startPeriodicQuotaSync()
         await loadQuota(silent: true, forceRefresh: false)
-        guard teamPreset.autoRefreshModelsOnLaunch else {
-            return
+        if teamPreset.autoRefreshModelsOnLaunch {
+            startPeriodicModelSync()
+            await refreshModelsFromRouter(silent: true)
         }
-        startPeriodicModelSync()
-        await refreshModelsFromRouter(silent: true)
+        migrateProxyToStrictRoutingIfNeeded()
     }
 
     func refreshStatus() {
@@ -349,9 +359,11 @@ final class AppState: ObservableObject {
             statusMessage = "Preparing 9Router"
             await refreshModelsFromRouter(silent: true, showProgress: false)
             let apiKey = apiKeyInput.contains("...") ? codexService.readAPIKey() : apiKeyInput
-            let model = preferredNineRouterModel
             let allModels = models
             do {
+                guard let model = preferredNineRouterModel else {
+                    throw AppStateError.noExplicitRouterModel
+                }
                 try codexService.switchToNineRouter(selectedModel: model, allModels: allModels, apiKey: apiKey)
                 selectedModelID = model.codexSlug
                 statusMessage = "Codex is now using 9Router: \(model.displayName)"
@@ -362,6 +374,22 @@ final class AppState: ObservableObject {
             }
             isBusy = false
             refreshStatus()
+        }
+    }
+
+    private func migrateProxyToStrictRoutingIfNeeded() {
+        refreshStatus()
+        guard status.activeProvider == "NineRouter" else {
+            return
+        }
+        do {
+            if try codexService.migrateProxyToStrictRoutingIfNeeded(allModels: models) {
+                refreshStatus()
+                statusMessage = "9Router proxy upgraded to strict model routing"
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            statusMessage = "Strict routing migration failed"
         }
     }
 
@@ -431,6 +459,10 @@ final class AppState: ObservableObject {
                     statusMessage = "You are on the latest version"
                 }
             case let .available(manifest):
+                if silent, UpdateNotificationCoordinator.shared.isSnoozed(version: manifest.version) {
+                    updateManifest = nil
+                    return
+                }
                 updateManifest = manifest
                 statusMessage = "Update \(manifest.version) is available"
                 notifyUpdate(manifest)
@@ -446,6 +478,7 @@ final class AppState: ObservableObject {
         guard let manifest = updateManifest, !isInstallingUpdate else {
             return
         }
+        UpdateNotificationCoordinator.shared.clearSnooze()
         Task {
             isInstallingUpdate = true
             isBusy = true
@@ -476,6 +509,18 @@ final class AppState: ObservableObject {
         }
     }
 
+    func remindAboutUpdateLater() {
+        guard let manifest = updateManifest else {
+            return
+        }
+        UpdateNotificationCoordinator.shared.remindLater(
+            version: manifest.version,
+            message: manifest.message
+        )
+        updateManifest = nil
+        statusMessage = "We'll remind you about \(manifest.version) in 4 hours"
+    }
+
     private func run(_ message: String, operation: () throws -> String) {
         isBusy = true
         errorMessage = nil
@@ -498,26 +543,41 @@ final class AppState: ObservableObject {
         }
 
         Task.detached(priority: .utility) {
-            let center = UNUserNotificationCenter.current()
-            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else {
-                return
-            }
-            let content = UNMutableNotificationContent()
-            content.title = "Codex Model Switcher \(manifest.version)"
-            content.body = manifest.message ?? "A new version is ready to install."
-            content.sound = .default
-            let request = UNNotificationRequest(
-                identifier: "codex-model-switcher-update-\(manifest.version)",
-                content: content,
-                trigger: nil
-            )
-            do {
-                try await center.add(request)
+            if await UpdateNotificationCoordinator.shared.postUpdateNotification(for: manifest) {
                 UserDefaults.standard.set(manifest.version, forKey: notificationKey)
-            } catch {
-                return
             }
         }
+    }
+
+    private func startUpdateNotificationActionListener() {
+        guard updateNotificationActionTask == nil else {
+            return
+        }
+        updateNotificationActionTask = Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(
+                named: .installAvailableUpdateRequested
+            ) {
+                guard let self else {
+                    return
+                }
+                await self.installUpdateRequestedByNotification()
+            }
+        }
+    }
+
+    private func installUpdateRequestedByNotification() async {
+        guard UserDefaults.standard.bool(forKey: UpdateNotificationCoordinator.pendingInstallKey),
+              !isInstallingUpdate else {
+            return
+        }
+        UserDefaults.standard.removeObject(forKey: UpdateNotificationCoordinator.pendingInstallKey)
+        UpdateNotificationCoordinator.shared.clearSnooze()
+        await checkForUpdates(silent: true, force: true)
+        guard updateManifest != nil else {
+            statusMessage = "No newer update is available"
+            return
+        }
+        installAvailableUpdate()
     }
 
     private func configureLaunchAtLogin() {
@@ -543,7 +603,7 @@ final class AppState: ObservableObject {
         }
         updateMonitorTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 6 * 60 * 60 * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: 60 * 60 * 1_000_000_000)
                 guard !Task.isCancelled, let self else {
                     return
                 }
